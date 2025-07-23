@@ -241,7 +241,7 @@ class AppealModal(discord.ui.Modal):
         self.appeal_reason = discord.ui.TextInput(label="Dlaczego chcesz otrzymać unbana?", style=discord.TextStyle.paragraph, required=True)
         self.add_item(self.appeal_reason)
     async def on_submit(self, interaction: discord.Interaction):
-        await create_generic_post(self, interaction, self.title.replace("Nowa ", ""), "🔓")
+        await create_generic_post(self, interaction, self.title.replace("Nowe ", ""), "🔓")
 
 class AdminApplicationModal(discord.ui.Modal, title="Podanie Admin JB"):
     nick = discord.ui.TextInput(label="Nick z serwera", required=True)
