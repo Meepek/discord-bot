@@ -25,6 +25,10 @@ REMINDER_CONFIG = {
     "enabled": False,
     "delay_days": 3
 }
+SHOP_CONFIG = {
+    "channel_id": None,
+    "role_id": None
+}
 
 # --- SZABLONY ODPOWIEDZI ---
 RESPONSE_TEMPLATES = {
@@ -58,7 +62,7 @@ def init_database():
     conn = sqlite3.connect('bot_database.db')
     cursor = conn.cursor()
 
-    # Najpierw tworzymy wszystkie tabele, jeśli nie istnieją.
+    # Tworzymy wszystkie tabele, jeśli nie istnieją.
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS suggestions (
             id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT NOT NULL, username TEXT NOT NULL,
@@ -98,8 +102,16 @@ def init_database():
             message_id INTEGER PRIMARY KEY, question TEXT NOT NULL, options TEXT NOT NULL,
             votes TEXT NOT NULL, author_id INTEGER NOT NULL
         )''')
-
-    # Dopiero teraz próbujemy dodać nowe kolumny do istniejących tabel.
+    # NOWA TABELA: Sklep
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS shop_items (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            description TEXT,
+            cost INTEGER NOT NULL
+        )''')
+    
+    # Dodawanie kolumn do istniejących tabel
     tables_to_alter = {
         "suggestions": "reminder_sent INTEGER DEFAULT 0",
         "bug_reports": "reminder_sent INTEGER DEFAULT 0",
@@ -272,7 +284,7 @@ class DiscordAdminApplicationModal(discord.ui.Modal, title="Podanie Admin DC"):
 
 class DecisionReasonModal(discord.ui.Modal, title="Uzasadnienie decyzji"):
     reason_input = discord.ui.TextInput(label="Notatka (opcjonalnie)", style=discord.TextStyle.paragraph, required=False, max_length=1024)
-
+    
     def __init__(self, original_interaction: discord.Interaction, action: str, post_type: str, author_id: int):
         super().__init__()
         self.original_interaction = original_interaction
@@ -287,7 +299,7 @@ class DecisionReasonModal(discord.ui.Modal, title="Uzasadnienie decyzji"):
 # --- LOGIKA DECYZJI ---
 async def process_decision(interaction: discord.Interaction, original_interaction: discord.Interaction, action: str, post_type: str, author_id: int, reason_text: str):
     original_embed = original_interaction.message.embeds[0]
-
+    
     action_map = {
         "accept_suggestion": {"text": "Propozycja przyjęta", "color": 0x2ecc71, "points": 5, "prefix": "[Zaakceptowane]", "final": True},
         "reject_suggestion": {"text": "Propozycja odrzucona", "color": 0xe74c3c, "points": 0, "prefix": "[Odrzucone]", "final": True},
@@ -301,7 +313,7 @@ async def process_decision(interaction: discord.Interaction, original_interactio
         "accept_application": {"text": "Podanie przyjęte", "color": 0x2ecc71, "points": 0, "prefix": "[Zaakceptowane]", "final": True},
         "reject_application": {"text": "Podanie odrzucone", "color": 0xe74c3c, "points": 0, "prefix": "[Odrzucone]", "final": True},
     }
-
+    
     action_details = action_map.get(action)
     if not action_details: return
 
@@ -310,7 +322,7 @@ async def process_decision(interaction: discord.Interaction, original_interactio
         if field.name == "📊 Status":
             original_embed.set_field_at(i, name="📊 Status", value=action_details["text"], inline=True)
             break
-
+    
     decision_embed = discord.Embed(title="Decyzja podjęta!", color=action_details["color"])
     decision_embed.add_field(name="Status", value=action_details["text"], inline=True)
     decision_embed.add_field(name="Rozpatrzył", value=interaction.user.mention, inline=True)
@@ -332,7 +344,7 @@ async def process_decision(interaction: discord.Interaction, original_interactio
         dm_message = f"😔 Niestety, Twoje podanie na **{post_type.replace('Podanie ', '')}** zostało odrzucone."
 
     new_view = None if action_details["final"] else ManagementView(post_type, author_id, is_in_progress=True)
-
+    
     await original_interaction.edit_original_response(embed=original_embed, view=new_view)
     await original_interaction.channel.send(embed=decision_embed)
 
@@ -341,7 +353,7 @@ async def process_decision(interaction: discord.Interaction, original_interactio
         new_name = f"{action_details['prefix']} {current_name}"
         if len(new_name) > 100: new_name = new_name[:97] + "..."
         await original_interaction.channel.edit(name=new_name, locked=True, archived=True)
-
+    
     if dm_message:
         try:
             member = interaction.guild.get_member(author_id)
@@ -371,7 +383,7 @@ async def create_generic_post(modal: discord.ui.Modal, interaction: discord.Inte
 
         post_title = f"{post_type}: {interaction.user.display_name}"
         thread_message = await forum_channel.create_thread(name=post_title, embed=embed, applied_tags=[tag], view=ManagementView(post_type, interaction.user.id))
-
+        
         data = {item.label: item.value for item in modal.children}
         if post_type.startswith("Propozycja"): save_suggestion(str(interaction.user.id), interaction.user.display_name, post_type, data.get('Opis propozycji'), data.get('Dlaczego ma zostać wprowadzona?'), str(thread_message.thread.id))
         elif post_type.startswith("Błąd"): save_bug_report(str(interaction.user.id), post_type, "Nieokreślony", data.get('Opis błędu'), data.get('Dowody (linki do screenów, filmów)'), str(thread_message.thread.id))
@@ -409,7 +421,7 @@ class ForumSelect(discord.ui.Select):
         modal_map = {"Propozycja JB": SuggestionModal, "Propozycja DC": SuggestionModal, "Błąd JB": BugReportModal, "Błąd DC": BugReportModal, "Skarga JB": ComplaintModal, "Skarga DC": ComplaintModal, "Odwołanie JB": AppealModal, "Odwołanie DC": AppealModal}
         if choice in modal_map: await interaction.response.send_modal(modal_map[choice](choice)); return
         if choice.startswith("Podanie"):
-            requirements_map = {"Podanie Admin JB": "• Minimum 16 lat\n• Co najmniej 10 godzin tygodniowo spędzonych na serwerze w ostatnim czasie\n• Minimum 60 godzin przegranych na serwerze\n• Nieposzlakowana opinia wśród graczy oraz innych administratorów\n• Wysoka kultura osobista i umiejętność pracy w zespole\n• Umiejętność podejmowania obiektywnych i trzeźwych decyzji\n• Perfekcyjna znajomość regulaminu oraz taryfikatora banów\n• Dobra znajomość naszego mod'a serwerowego oraz jego zasad\n• Posiadanie dobrego mikrofonu oraz mutacji \n• Umiejętność opanowania emocji i zachowanie zimnej krwi w trudnych sytuacjach", "Podanie Zaufany JB": "• Minimum 14 lat\n• Co najmniej 10 godzin tygodniowo spędzonych na serwerze w ostatnim czasie\n• Minimum 70 godzin przegranych na serwerze\n•  Nieposzlakowana opinia wśród graczy oraz innych administratorów\n• Wysoka kultura osobista i umiejętność pracy w zespole\n• Umiejętność podejmowania obiektywnych i trzeźwych decyzji\n• Perfekcyjna znajomość regulaminu oraz taryfikatora banów\n• Dobra znajomość naszego mod'a serwerowego oraz jego zasad\n• Posiadanie dobrego mikrofonu oraz mutacji (w przypadku aplikacji na Junior Admina)\n• Umiejętność opanowania emocji i zachowanie zimnej krwi w trudnych sytuacjach", "Podanie Admin DC": "• Doświadczenie z Discordem\n• ..."}
+            requirements_map = {"Podanie Admin JB": "• Minimum 16 lat\n• ...", "Podanie Zaufany JB": "• Minimum 14 lat\n• ...", "Podanie Admin DC": "• Doświadczenie z Discordem\n• ..."}
             embed = discord.Embed(title=f"Wymagania - {choice}", description=requirements_map.get(choice, "Brak zdefiniowanych wymagań."), color=0x5865F2)
             await interaction.response.send_message(embed=embed, view=RequirementsView(choice), ephemeral=True)
 
@@ -418,19 +430,12 @@ class RequirementsView(discord.ui.View):
         super().__init__(timeout=180)
         self.application_type = application_type
 
-        # Przycisk kontynuacji
         continue_btn = discord.ui.Button(label="Akceptuję i chcę kontynuować", style=discord.ButtonStyle.success, emoji="✅")
         continue_btn.callback = self.continue_callback
         self.add_item(continue_btn)
 
-        # Warunkowe dodanie przycisku statystyk
         if application_type in ["Podanie Admin JB", "Podanie Zaufany JB"]:
-            stats_btn = discord.ui.Button(
-                label="Statystyki serwera",
-                style=discord.ButtonStyle.link,
-                url="https://tsarvar.com/pl/servers/counter-strike-2/91.224.117.153:27015",
-                emoji="📊"
-            )
+            stats_btn = discord.ui.Button(label="Statystyki serwera", style=discord.ButtonStyle.link, url="https://tsarvar.com/pl/servers/counter-strike-2/91.224.117.153:27015", emoji="📊")
             self.add_item(stats_btn)
 
     async def continue_callback(self, interaction: discord.Interaction):
@@ -467,7 +472,7 @@ class ManagementSelect(discord.ui.Select):
         if not has_permission_for_type(interaction.user, self.post_type):
             await interaction.response.send_message("❌ Nie masz uprawnień!", ephemeral=True)
             return
-
+        
         action = self.values[0]
         if action in RESPONSE_TEMPLATES:
             view = TemplateReasonView(original_interaction=interaction, action=action, post_type=self.post_type, author_id=self.view.author_id)
@@ -485,7 +490,7 @@ class TemplateReasonView(discord.ui.View):
 
         templates = RESPONSE_TEMPLATES.get(action, [])
         options = [discord.SelectOption(label=t[:100]) for t in templates]
-
+        
         self.select_menu = discord.ui.Select(placeholder="Wybierz gotowy szablon odpowiedzi...", options=options)
         self.select_menu.callback = self.select_callback
         self.add_item(self.select_menu)
@@ -526,14 +531,14 @@ class PollButton(discord.ui.Button):
 
         votes = json.loads(votes_json[0])
         voter_id_str = str(interaction.user.id)
-
+        
         for option_votes in votes.values():
             if voter_id_str in option_votes: option_votes.remove(voter_id_str)
 
         votes[str(button_index)].append(voter_id_str)
         cursor.execute("UPDATE polls SET votes = ? WHERE message_id = ?", (json.dumps(votes), message_id))
         conn.commit()
-
+        
         cursor.execute("SELECT question, options, author_id FROM polls WHERE message_id = ?", (message_id,))
         poll_data = cursor.fetchone()
         conn.close()
@@ -647,10 +652,10 @@ async def ankieta(interaction: discord.Interaction, pytanie: str, opcje: str):
     for opt in options_list:
         embed.add_field(name=f"{opt} (0)", value="Brak głosów", inline=False)
     embed.set_footer(text=f"Ankieta stworzona przez: {interaction.user.display_name}")
-
+    
     await interaction.response.send_message("Tworzenie ankiety...", ephemeral=True)
     message = await interaction.channel.send(embed=embed)
-
+    
     view = PollView(options=options_list, message_id=message.id)
     await message.edit(view=view)
 
@@ -663,6 +668,130 @@ async def ankieta(interaction: discord.Interaction, pytanie: str, opcje: str):
     conn.close()
     await interaction.edit_original_response(content="✅ Ankieta została utworzona!")
 
+# --- NOWE KOMENDY SKLEPU ---
+@bot.tree.command(name="setup_sklep", description="Konfiguruje kanał powiadomień o zakupach w sklepie.")
+@app_commands.checks.has_permissions(administrator=True)
+async def setup_sklep(interaction: discord.Interaction, kanal: discord.TextChannel, rola: discord.Role):
+    SHOP_CONFIG["channel_id"] = kanal.id
+    SHOP_CONFIG["role_id"] = rola.id
+    await interaction.response.send_message(f"✅ Skonfigurowano powiadomienia o zakupach na kanale {kanal.mention} z rolą {rola.mention}.", ephemeral=True)
+
+@bot.tree.command(name="dodaj_przedmiot", description="Dodaje nowy przedmiot do sklepu reputacji.")
+@app_commands.checks.has_permissions(administrator=True)
+async def dodaj_przedmiot(interaction: discord.Interaction, nazwa: str, koszt: app_commands.Range[int, 1], opis: str):
+    conn = sqlite3.connect('bot_database.db')
+    cursor = conn.cursor()
+    cursor.execute("INSERT INTO shop_items (name, cost, description) VALUES (?, ?, ?)", (nazwa, koszt, opis))
+    conn.commit()
+    conn.close()
+    await interaction.response.send_message(f"✅ Dodano przedmiot `{nazwa}` do sklepu za **{koszt}** punktów reputacji.", ephemeral=True)
+
+@bot.tree.command(name="usun_przedmiot", description="Usuwa przedmiot ze sklepu reputacji.")
+@app_commands.checks.has_permissions(administrator=True)
+async def usun_przedmiot(interaction: discord.Interaction, id_przedmiotu: int):
+    conn = sqlite3.connect('bot_database.db')
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM shop_items WHERE id = ?", (id_przedmiotu,))
+    conn.commit()
+    if cursor.rowcount > 0:
+        await interaction.response.send_message(f"✅ Usunięto przedmiot o ID **{id_przedmiotu}** ze sklepu.", ephemeral=True)
+    else:
+        await interaction.response.send_message(f"❌ Nie znaleziono przedmiotu o ID **{id_przedmiotu}**.", ephemeral=True)
+    conn.close()
+
+@bot.tree.command(name="sklep", description="Wyświetla przedmioty dostępne w sklepie reputacji.")
+async def sklep(interaction: discord.Interaction):
+    await interaction.response.defer()
+    conn = sqlite3.connect('bot_database.db')
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, name, cost, description FROM shop_items ORDER BY cost ASC")
+    items = cursor.fetchall()
+    conn.close()
+
+    embed = discord.Embed(title="🛒 Sklep za Punkty Reputacji", color=0x2ecc71)
+    if not items:
+        embed.description = "Sklep jest aktualnie pusty. Wróć później!"
+    else:
+        description = "Użyj komendy `/kup [ID]`, aby nabyć przedmiot.\n\n"
+        for item in items:
+            description += f"**ID: {item[0]} | {item[1]}** - `{item[2]} pkt.`\n*_{item[3]}_*\n\n"
+        embed.description = description
+    
+    await interaction.followup.send(embed=embed)
+
+@bot.tree.command(name="kup", description="Kupuje przedmiot ze sklepu za punkty reputacji.")
+async def kup(interaction: discord.Interaction, id_przedmiotu: int):
+    await interaction.response.defer(ephemeral=True)
+    
+    conn = sqlite3.connect('bot_database.db')
+    cursor = conn.cursor()
+    
+    # Pobierz informacje o przedmiocie
+    cursor.execute("SELECT name, cost FROM shop_items WHERE id = ?", (id_przedmiotu,))
+    item = cursor.fetchone()
+    if not item:
+        await interaction.followup.send("❌ Nie znaleziono przedmiotu o podanym ID.")
+        conn.close()
+        return
+
+    item_name, item_cost = item
+
+    # Pobierz punkty użytkownika
+    cursor.execute("SELECT points FROM reputation_points WHERE user_id = ?", (str(interaction.user.id),))
+    user_points_row = cursor.fetchone()
+    user_points = user_points_row[0] if user_points_row else 0
+
+    if user_points < item_cost:
+        await interaction.followup.send(f"❌ Nie masz wystarczającej liczby punktów! Potrzebujesz **{item_cost}**, a masz **{user_points}**.")
+        conn.close()
+        return
+
+    # Odejmij punkty i zapisz
+    new_points = user_points - item_cost
+    cursor.execute("UPDATE reputation_points SET points = ? WHERE user_id = ?", (new_points, str(interaction.user.id)))
+    conn.commit()
+    conn.close()
+
+    await interaction.followup.send(f"✅ Gratulacje! Kupiłeś **{item_name}** za **{item_cost}** punktów. Twoje saldo: **{new_points}** pkt.\nAdministracja została powiadomiona i wkrótce otrzymasz swoją nagrodę.")
+
+    # Wyślij powiadomienie do adminów
+    if SHOP_CONFIG.get("channel_id") and SHOP_CONFIG.get("role_id"):
+        notif_channel = bot.get_channel(SHOP_CONFIG["channel_id"])
+        if notif_channel:
+            role_mention = f"<@&{SHOP_CONFIG['role_id']}>"
+            embed = discord.Embed(title="🛍️ Nowy zakup w sklepie!", color=0x2ecc71, timestamp=datetime.now(POLAND_TZ))
+            embed.add_field(name="Kupujący", value=interaction.user.mention, inline=False)
+            embed.add_field(name="Przedmiot", value=f"{item_name} (ID: {id_przedmiotu})", inline=False)
+            embed.add_field(name="Koszt", value=f"{item_cost} punktów reputacji", inline=False)
+            embed.set_footer(text="Proszę o ręczne nadanie nagrody!")
+            await notif_channel.send(content=role_mention, embed=embed)
+
+@bot.tree.command(name="ranking", description="Wyświetla ranking użytkowników z największą reputacją.")
+async def ranking(interaction: discord.Interaction):
+    await interaction.response.defer()
+    conn = sqlite3.connect('bot_database.db')
+    cursor = conn.cursor()
+    cursor.execute("SELECT user_id, points FROM reputation_points ORDER BY points DESC LIMIT 10")
+    top_users = cursor.fetchall()
+    conn.close()
+
+    embed = discord.Embed(title="🏆 Ranking Reputacji - Top 10", color=0xf1c40f)
+    
+    if not top_users:
+        embed.description = "Ranking jest pusty. Bądź pierwszy i zdobądź punkty!"
+    else:
+        description = ""
+        medals = ["🥇", "🥈", "🥉"]
+        for i, (user_id, points) in enumerate(top_users):
+            user = interaction.guild.get_member(int(user_id))
+            user_name = user.display_name if user else f"Użytkownik (ID: {user_id})"
+            medal = medals[i] if i < 3 else f"**{i+1}.**"
+            description += f"{medal} {user_name} - `{points} pkt.`\n"
+        embed.description = description
+
+    await interaction.followup.send(embed=embed)
+
+
 # --- ZADANIA W TLE ---
 @tasks.loop(hours=1)
 async def check_for_old_posts():
@@ -671,7 +800,7 @@ async def check_for_old_posts():
 
     conn = sqlite3.connect('bot_database.db')
     cursor = conn.cursor()
-
+    
     delay = timedelta(days=REMINDER_CONFIG["delay_days"])
     time_threshold = datetime.now(POLAND_TZ) - delay
 
@@ -681,9 +810,8 @@ async def check_for_old_posts():
     }
 
     for table, type_col in tables_to_check.items():
-        # Używamy `strftime` do porównywania dat w formacie tekstowym
         cursor.execute(f"SELECT thread_id, {type_col} FROM {table} WHERE status NOT LIKE '%odrzucon%' AND status NOT LIKE '%przyjęt%' AND status NOT LIKE '%naprawion%' AND reminder_sent = 0 AND created_at < ?", (time_threshold.strftime('%Y-%m-%d %H:%M:%S.%f'),))
-
+        
         old_posts = cursor.fetchall()
         for thread_id, post_type in old_posts:
             for guild in bot.guilds:
@@ -694,7 +822,7 @@ async def check_for_old_posts():
                         cursor.execute(f"UPDATE {table} SET reminder_sent = 1 WHERE thread_id = ?", (thread_id,))
                         conn.commit()
                 except (discord.NotFound, discord.Forbidden):
-                    continue # Wątek usunięty lub bot nie ma dostępu
+                    continue
     conn.close()
 
 
@@ -703,16 +831,15 @@ async def check_for_old_posts():
 async def on_ready():
     print(f'Zalogowano jako {bot.user}!')
     init_database()
-
-    # Rejestracja widoków
+    
     bot.add_view(ForumSelectionView("proposals_bugs"))
     bot.add_view(ForumSelectionView("complaints_appeals"))
     bot.add_view(ForumSelectionView("recruitment"))
-
+    
     post_types = ["Propozycja JB", "Propozycja DC", "Błąd JB", "Błąd DC", "Skarga JB", "Skarga DC", "Odwołanie JB", "Odwołanie DC", "Podanie Admin JB", "Podanie Zaufany JB", "Podanie Admin DC"]
     for post_type in post_types:
         bot.add_view(ManagementView(post_type, author_id=0))
-
+    
     conn = sqlite3.connect('bot_database.db')
     cursor = conn.cursor()
     cursor.execute("SELECT message_id, options FROM polls")
@@ -722,7 +849,6 @@ async def on_ready():
         bot.add_view(PollView(options, message_id))
     conn.close()
 
-    # Uruchomienie pętli w tle
     check_for_old_posts.start()
 
     try:
@@ -732,7 +858,7 @@ async def on_ready():
         print(f"Błąd synchronizacji komend: {e}")
 
 # --- URUCHOMIENIE BOTA ---
-TOKEN = os.getenv('DISCORD_BOT_TOKEN')
+TOKEN = os.getenv('DISCORD_BOT_TOKEN', 'TWÓJ_TOKEN_BOTA_TUTAJ')
 if TOKEN == 'TWÓJ_TOKEN_BOTA_TUTAJ':
     print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
     print("!!! PROSZĘ ZASTĄPIĆ 'TWÓJ_TOKEN_BOTA_TUTAJ' PRAWDZIWYM TOKENEM !!!")
