@@ -29,6 +29,7 @@ SHOP_CONFIG = {
     "channel_id": None,
     "role_id": None
 }
+SHOP_CATEGORIES = ["VIP", "Premium", "Fajki", "Oferty Dnia", "Inne"]
 
 # --- SZABLONY ODPOWIEDZI ---
 RESPONSE_TEMPLATES = {
@@ -102,16 +103,15 @@ def init_database():
             message_id INTEGER PRIMARY KEY, question TEXT NOT NULL, options TEXT NOT NULL,
             votes TEXT NOT NULL, author_id INTEGER NOT NULL
         )''')
-    # NOWA TABELA: Sklep
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS shop_items (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
             description TEXT,
-            cost INTEGER NOT NULL
+            cost INTEGER NOT NULL,
+            category TEXT NOT NULL
         )''')
     
-    # Dodawanie kolumn do istniejących tabel
     tables_to_alter = {
         "suggestions": "reminder_sent INTEGER DEFAULT 0",
         "bug_reports": "reminder_sent INTEGER DEFAULT 0",
@@ -139,35 +139,35 @@ def save_suggestion(user_id, username, category, description, reason, thread_id)
     conn.close()
 
 def save_bug_report(user_id, category, bug_type, description, evidence, thread_id):
-    conn = sqlite3.connect('/data/bot_database.db')
+   conn = sqlite3.connect('/data/bot_database.db')
     cursor = conn.cursor()
     cursor.execute('INSERT INTO bug_reports (user_id, category, bug_type, description, evidence, thread_id) VALUES (?, ?, ?, ?, ?, ?)',(user_id, category, bug_type, description, evidence, thread_id))
     conn.commit()
     conn.close()
 
 def save_complaint(user_id, complaint_type, target_user, data, thread_id):
-    conn = sqlite3.connect('/data/bot_database.db')
+   conn = sqlite3.connect('/data/bot_database.db')
     cursor = conn.cursor()
     cursor.execute('INSERT INTO complaints (user_id, complaint_type, target_user, data, thread_id) VALUES (?, ?, ?, ?, ?)',(user_id, complaint_type, target_user, json.dumps(data), thread_id))
     conn.commit()
     conn.close()
 
 def save_appeal(user_id, appeal_type, data, thread_id):
-    conn = sqlite3.connect('/data/bot_database.db')
+   conn = sqlite3.connect('/data/bot_database.db')
     cursor = conn.cursor()
     cursor.execute('INSERT INTO appeals (user_id, appeal_type, data, thread_id) VALUES (?, ?, ?, ?)',(user_id, appeal_type, json.dumps(data), thread_id))
     conn.commit()
     conn.close()
 
 def save_application(user_id, username, app_type, data, thread_id):
-    conn = sqlite3.connect('/data/bot_database.db')
+   conn = sqlite3.connect('/data/bot_database.db')
     cursor = conn.cursor()
     cursor.execute('INSERT INTO applications (user_id, username, application_type, data, thread_id) VALUES (?, ?, ?, ?, ?)',(user_id, username, app_type, json.dumps(data), thread_id))
     conn.commit()
     conn.close()
 
 async def add_reputation(user_id: int, points: int):
-    conn = sqlite3.connect('/data/bot_database.db')
+   conn = sqlite3.connect('/data/bot_database.db')
     cursor = conn.cursor()
     cursor.execute("INSERT OR IGNORE INTO reputation_points (user_id, points) VALUES (?, 0)", (str(user_id),))
     cursor.execute("UPDATE reputation_points SET points = points + ? WHERE user_id = ?", (points, str(user_id)))
@@ -523,7 +523,7 @@ class PollButton(discord.ui.Button):
         message_id = int(self.custom_id.split('_')[1])
         button_index = int(self.custom_id.split('_')[2])
 
-        conn = sqlite3.connect('/data/bot_database.db')
+       conn = sqlite3.connect('/data/bot_database.db')
         cursor = conn.cursor()
         cursor.execute("SELECT votes FROM polls WHERE message_id = ?", (message_id,))
         votes_json = cursor.fetchone()
@@ -603,7 +603,7 @@ async def setup_forum_rekrutacje(interaction: discord.Interaction, kanal_forum: 
 @app_commands.checks.has_permissions(manage_messages=True)
 async def info(interaction: discord.Interaction, uzytkownik: discord.Member):
     await interaction.response.defer(ephemeral=True)
-    conn = sqlite3.connect('/data/bot_database.db')
+   conn = sqlite3.connect('/data/bot_database.db')
     cursor = conn.cursor()
     embed = discord.Embed(title=f"📊 Kartoteka: {uzytkownik.display_name}", color=uzytkownik.color, timestamp=datetime.now(POLAND_TZ))
     embed.set_thumbnail(url=uzytkownik.display_avatar.url)
@@ -621,7 +621,7 @@ async def info(interaction: discord.Interaction, uzytkownik: discord.Member):
 @bot.tree.command(name="moje_zgłoszenia", description="Wyświetla listę Twoich zgłoszeń i ich status.")
 async def moje_zgłoszenia(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral=True)
-    conn = sqlite3.connect('/data/bot_database.db')
+   conn = sqlite3.connect('/data/bot_database.db')
     cursor = conn.cursor()
     embed = discord.Embed(title=f"📝 Twoje zgłoszenia", color=interaction.user.color, timestamp=datetime.now(POLAND_TZ))
     tables_map = {"Propozycje": ("suggestions", "category", "status"), "Błędy": ("bug_reports", "category", "status"), "Skargi": ("complaints", "complaint_type", "status"), "Odwołania": ("appeals", "appeal_type", "status"), "Podania": ("applications", "application_type", "status")}
@@ -659,7 +659,7 @@ async def ankieta(interaction: discord.Interaction, pytanie: str, opcje: str):
     view = PollView(options=options_list, message_id=message.id)
     await message.edit(view=view)
 
-    conn = sqlite3.connect('/data/bot_database.db')
+   conn = sqlite3.connect('/data/bot_database.db')
     cursor = conn.cursor()
     initial_votes = json.dumps({str(i): [] for i in range(len(options_list))})
     cursor.execute("INSERT INTO polls (message_id, question, options, votes, author_id) VALUES (?, ?, ?, ?, ?)",
@@ -669,27 +669,35 @@ async def ankieta(interaction: discord.Interaction, pytanie: str, opcje: str):
     await interaction.edit_original_response(content="✅ Ankieta została utworzona!")
 
 # --- NOWE KOMENDY SKLEPU ---
-@bot.tree.command(name="setup_sklep", description="Konfiguruje kanał powiadomień o zakupach w sklepie.")
+@bot.tree.command(name="setup_powiadomienia_sklep", description="Konfiguruje kanał powiadomień o zakupach w sklepie.")
 @app_commands.checks.has_permissions(administrator=True)
-async def setup_sklep(interaction: discord.Interaction, kanal: discord.TextChannel, rola: discord.Role):
+async def setup_powiadomienia_sklep(interaction: discord.Interaction, kanal: discord.TextChannel, rola: discord.Role):
     SHOP_CONFIG["channel_id"] = kanal.id
     SHOP_CONFIG["role_id"] = rola.id
     await interaction.response.send_message(f"✅ Skonfigurowano powiadomienia o zakupach na kanale {kanal.mention} z rolą {rola.mention}.", ephemeral=True)
 
 @bot.tree.command(name="dodaj_przedmiot", description="Dodaje nowy przedmiot do sklepu reputacji.")
 @app_commands.checks.has_permissions(administrator=True)
-async def dodaj_przedmiot(interaction: discord.Interaction, nazwa: str, koszt: app_commands.Range[int, 1], opis: str):
-    conn = sqlite3.connect('/data/bot_database.db')
+@app_commands.describe(kategoria="Kategoria przedmiotu", nazwa="Nazwa przedmiotu", koszt="Cena w punktach reputacji", opis="Opis przedmiotu")
+async def dodaj_przedmiot(interaction: discord.Interaction, kategoria: str, nazwa: str, koszt: app_commands.Range[int, 1], opis: str):
+    if kategoria not in SHOP_CATEGORIES:
+        await interaction.response.send_message(f"❌ Nieprawidłowa kategoria. Dostępne kategorie: {', '.join(SHOP_CATEGORIES)}", ephemeral=True)
+        return
+   conn = sqlite3.connect('/data/bot_database.db')
     cursor = conn.cursor()
-    cursor.execute("INSERT INTO shop_items (name, cost, description) VALUES (?, ?, ?)", (nazwa, koszt, opis))
+    cursor.execute("INSERT INTO shop_items (name, cost, description, category) VALUES (?, ?, ?, ?)", (nazwa, koszt, opis, kategoria))
     conn.commit()
     conn.close()
-    await interaction.response.send_message(f"✅ Dodano przedmiot `{nazwa}` do sklepu za **{koszt}** punktów reputacji.", ephemeral=True)
+    await interaction.response.send_message(f"✅ Dodano przedmiot `{nazwa}` do kategorii `{kategoria}` za **{koszt}** punktów reputacji.", ephemeral=True)
+
+@dodaj_przedmiot.autocomplete('kategoria')
+async def dodaj_przedmiot_autocomplete(interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
+    return [app_commands.Choice(name=cat, value=cat) for cat in SHOP_CATEGORIES if current.lower() in cat.lower()]
 
 @bot.tree.command(name="usun_przedmiot", description="Usuwa przedmiot ze sklepu reputacji.")
 @app_commands.checks.has_permissions(administrator=True)
 async def usun_przedmiot(interaction: discord.Interaction, id_przedmiotu: int):
-    conn = sqlite3.connect('/data/bot_database.db')
+   conn = sqlite3.connect('/data/bot_database.db')
     cursor = conn.cursor()
     cursor.execute("DELETE FROM shop_items WHERE id = ?", (id_przedmiotu,))
     conn.commit()
@@ -699,77 +707,18 @@ async def usun_przedmiot(interaction: discord.Interaction, id_przedmiotu: int):
         await interaction.response.send_message(f"❌ Nie znaleziono przedmiotu o ID **{id_przedmiotu}**.", ephemeral=True)
     conn.close()
 
-@bot.tree.command(name="sklep", description="Wyświetla przedmioty dostępne w sklepie reputacji.")
-async def sklep(interaction: discord.Interaction):
-    await interaction.response.defer()
-    conn = sqlite3.connect('/data/bot_database.db')
-    cursor = conn.cursor()
-    cursor.execute("SELECT id, name, cost, description FROM shop_items ORDER BY cost ASC")
-    items = cursor.fetchall()
-    conn.close()
-
-    embed = discord.Embed(title="🛒 Sklep za Punkty Reputacji", color=0x2ecc71)
-    if not items:
-        embed.description = "Sklep jest aktualnie pusty. Wróć później!"
-    else:
-        description = "Użyj komendy `/kup [ID]`, aby nabyć przedmiot.\n\n"
-        for item in items:
-            description += f"**ID: {item[0]} | {item[1]}** - `{item[2]} pkt.`\n*_{item[3]}_*\n\n"
-        embed.description = description
-    
-    await interaction.followup.send(embed=embed)
-
-@bot.tree.command(name="kup", description="Kupuje przedmiot ze sklepu za punkty reputacji.")
-async def kup(interaction: discord.Interaction, id_przedmiotu: int):
-    await interaction.response.defer(ephemeral=True)
-    
-    conn = sqlite3.connect('/data/bot_database.db')
-    cursor = conn.cursor()
-    
-    # Pobierz informacje o przedmiocie
-    cursor.execute("SELECT name, cost FROM shop_items WHERE id = ?", (id_przedmiotu,))
-    item = cursor.fetchone()
-    if not item:
-        await interaction.followup.send("❌ Nie znaleziono przedmiotu o podanym ID.")
-        conn.close()
-        return
-
-    item_name, item_cost = item
-
-    # Pobierz punkty użytkownika
-    cursor.execute("SELECT points FROM reputation_points WHERE user_id = ?", (str(interaction.user.id),))
-    user_points_row = cursor.fetchone()
-    user_points = user_points_row[0] if user_points_row else 0
-
-    if user_points < item_cost:
-        await interaction.followup.send(f"❌ Nie masz wystarczającej liczby punktów! Potrzebujesz **{item_cost}**, a masz **{user_points}**.")
-        conn.close()
-        return
-
-    # Odejmij punkty i zapisz
-    new_points = user_points - item_cost
-    cursor.execute("UPDATE reputation_points SET points = ? WHERE user_id = ?", (new_points, str(interaction.user.id)))
-    conn.commit()
-    conn.close()
-
-    await interaction.followup.send(f"✅ Gratulacje! Kupiłeś **{item_name}** za **{item_cost}** punktów. Twoje saldo: **{new_points}** pkt.\nAdministracja została powiadomiona i wkrótce otrzymasz swoją nagrodę.")
-
-    # Wyślij powiadomienie do adminów
-    if SHOP_CONFIG.get("channel_id") and SHOP_CONFIG.get("role_id"):
-        notif_channel = bot.get_channel(SHOP_CONFIG["channel_id"])
-        if notif_channel:
-            role_mention = f"<@&{SHOP_CONFIG['role_id']}>"
-            embed = discord.Embed(title="🛍️ Nowy zakup w sklepie!", color=0x2ecc71, timestamp=datetime.now(POLAND_TZ))
-            embed.add_field(name="Kupujący", value=interaction.user.mention, inline=False)
-            embed.add_field(name="Przedmiot", value=f"{item_name} (ID: {id_przedmiotu})", inline=False)
-            embed.add_field(name="Koszt", value=f"{item_cost} punktów reputacji", inline=False)
-            embed.set_footer(text="Proszę o ręczne nadanie nagrody!")
-            await notif_channel.send(content=role_mention, embed=embed)
+@bot.tree.command(name="setup_sklep_panel", description="Tworzy interaktywny panel sklepu na kanale.")
+@app_commands.checks.has_permissions(administrator=True)
+async def setup_sklep_panel(interaction: discord.Interaction, kanal: discord.TextChannel):
+    embed = await create_shop_embed(SHOP_CATEGORIES[0]) # Wyświetl pierwszą kategorię domyślnie
+    view = ShopView(initial_category=SHOP_CATEGORIES[0])
+    await kanal.send(embed=embed, view=view)
+    await interaction.response.send_message(f"✅ Panel sklepu został utworzony na kanale {kanal.mention}.", ephemeral=True)
 
 @bot.tree.command(name="ranking", description="Wyświetla ranking użytkowników z największą reputacją.")
 async def ranking(interaction: discord.Interaction):
     await interaction.response.defer()
-    conn = sqlite3.connect('/data/bot_database.db')
+   conn = sqlite3.connect('/data/bot_database.db')
     cursor = conn.cursor()
     cursor.execute("SELECT user_id, points FROM reputation_points ORDER BY points DESC LIMIT 10")
     top_users = cursor.fetchall()
@@ -798,7 +747,7 @@ async def check_for_old_posts():
     if not REMINDER_CONFIG["enabled"]:
         return
 
-    conn = sqlite3.connect('/data/bot_database.db')
+   conn = sqlite3.connect('/data/bot_database.db')
     cursor = conn.cursor()
     
     delay = timedelta(days=REMINDER_CONFIG["delay_days"])
@@ -835,12 +784,13 @@ async def on_ready():
     bot.add_view(ForumSelectionView("proposals_bugs"))
     bot.add_view(ForumSelectionView("complaints_appeals"))
     bot.add_view(ForumSelectionView("recruitment"))
+    bot.add_view(ShopView()) # Rejestracja widoku sklepu
     
     post_types = ["Propozycja JB", "Propozycja DC", "Błąd JB", "Błąd DC", "Skarga JB", "Skarga DC", "Odwołanie JB", "Odwołanie DC", "Podanie Admin JB", "Podanie Zaufany JB", "Podanie Admin DC"]
     for post_type in post_types:
         bot.add_view(ManagementView(post_type, author_id=0))
     
-    conn = sqlite3.connect('/data/bot_database.db')
+   conn = sqlite3.connect('/data/bot_database.db')
     cursor = conn.cursor()
     cursor.execute("SELECT message_id, options FROM polls")
     for row in cursor.fetchall():
