@@ -20,7 +20,7 @@ LOG_CHANNEL_ID = None
 POLAND_TZ = pytz.timezone('Europe/Warsaw')
 
 # --- BRANDING ---
-LOGO_URL = "https://imgur.com/a/aelios2-pl-RxzWXHH" # Wklej tutaj link do swojego logo (np. z Imgur)
+LOGO_URL = "https://imgur.com/R81ZCMN.png" # Wklej tutaj link do swojego logo (np. z Imgur)
 FOOTER_TEXT = "© Aelios2.pl | Bot by Meep"
 
 # --- KONFIGURACJA FUNKCJI ---
