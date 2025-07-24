@@ -631,7 +631,6 @@ class ShopItemSelect(discord.ui.Select):
             self.disabled = True
         else:
             for item_id, name, cost, stock in items:
-                # POPRAWKA: Nie dodajemy wyprzedanych przedmiotów do opcji
                 if stock is not None and stock <= 0:
                     continue
                 label = f"{name} ({cost} rep.)"
@@ -655,7 +654,7 @@ class ShopItemSelect(discord.ui.Select):
         item_name, item_cost, role_id, stock, category = item
 
         if stock is not None and stock <= 0:
-            await interaction.followup.send("❌ Ten przedmiot jest już wyprzedany!")
+            await interaction.followup.send("❌ Ten przedmiot jest już wyprzedany!", ephemeral=True)
             conn.close()
             return
 
@@ -664,7 +663,7 @@ class ShopItemSelect(discord.ui.Select):
         user_points = user_points_row[0] if user_points_row else 0
 
         if user_points < item_cost:
-            await interaction.followup.send(f"❌ Nie masz wystarczającej reputacji! Potrzebujesz **{item_cost}**, a masz **{user_points}**.")
+            await interaction.followup.send(f"❌ Nie masz wystarczającej reputacji! Potrzebujesz **{item_cost}**, a masz **{user_points}**.", ephemeral=True)
             conn.close()
             return
 
@@ -681,18 +680,18 @@ class ShopItemSelect(discord.ui.Select):
                 role_to_add = interaction.guild.get_role(role_id)
                 if role_to_add:
                     await interaction.user.add_roles(role_to_add, reason="Zakup w sklepie reputacji")
-                    await interaction.followup.send(f"✅ Gratulacje! Kupiłeś i otrzymałeś rolę **{item_name}** za **{item_cost}** reputacji. Twoje saldo: **{new_points}** rep.")
+                    await interaction.followup.send(f"✅ Gratulacje! Kupiłeś i otrzymałeś rolę **{item_name}** za **{item_cost}** reputacji. Twoje saldo: **{new_points}** rep.", ephemeral=True)
                 else:
                     raise ValueError("Rola nie znaleziona")
             except Exception as e:
                 print(f"Błąd podczas nadawania roli ze sklepu: {e}")
-                await interaction.followup.send(f"✅ Zakupiono **{item_name}**, ale wystąpił błąd przy nadawaniu roli. Administracja została powiadomiona.")
+                await interaction.followup.send(f"✅ Zakupiono **{item_name}**, ale wystąpił błąd przy nadawaniu roli. Administracja została powiadomiona.", ephemeral=True)
                 if SHOP_CONFIG.get("channel_id"):
                     notif_channel = bot.get_channel(SHOP_CONFIG["channel_id"])
                     if notif_channel:
                         await notif_channel.send(f"⚠️ **Błąd automatyzacji!** Użytkownik {interaction.user.mention} kupił rolę `{item_name}`, ale nie udało się jej nadać. Proszę o ręczne nadanie.")
         else:
-            await interaction.followup.send(f"✅ Gratulacje! Kupiłeś **{item_name}** za **{item_cost}** reputacji. Twoje saldo: **{new_points}** rep.\nAdministracja została powiadomiona i wkrótce otrzymasz swoją nagrodę.")
+            await interaction.followup.send(f"✅ Gratulacje! Kupiłeś **{item_name}** za **{item_cost}** reputacji. Twoje saldo: **{new_points}** rep.\nAdministracja została powiadomiona i wkrótce otrzymasz swoją nagrodę.", ephemeral=True)
             if SHOP_CONFIG.get("channel_id") and category in ["VIP", "Premium", "Fajki", "Oferty Dnia"]:
                 notif_channel = bot.get_channel(SHOP_CONFIG["channel_id"])
                 if notif_channel:
