@@ -20,13 +20,13 @@ LOG_CHANNEL_ID = None
 POLAND_TZ = pytz.timezone('Europe/Warsaw')
 
 # --- BRANDING & COLORS ---
-LOGO_URL = "https://imgur.com/PpizE6t.png" 
+LOGO_URL = "https://i.postimg.cc/0jY1crF6/moje-logo2.jpg" 
 FOOTER_TEXT = "© Aelios2.pl | Bot by Meep"
 COLORS = {
     "main": 0xE67E22,      # Pomarańczowy
     "success": 0x2ECC71,   # Zielony
     "error": 0xE74C3C,     # Czerwony
-    "warn": 0xF1C40F,      # Żółty
+    "warn": 0x3498DB,      # Jasnoniebieski (zmieniony z żółtego)
 }
 
 # --- KONFIGURACJA FUNKCJI ---
@@ -320,7 +320,8 @@ class DecisionReasonModal(discord.ui.Modal, title="Uzasadnienie decyzji"):
 
 # --- LOGIKA DECYZJI ---
 async def process_decision(interaction: discord.Interaction, original_interaction: discord.Interaction, action: str, post_type: str, author_id: int, reason_text: str):
-    original_embed = original_interaction.message.embeds[0]
+    original_message = original_interaction.message
+    original_embed = original_message.embeds[0]
     
     action_map = {
         "accept_suggestion": {"text": "Propozycja przyjęta", "color": COLORS["success"], "points": 5, "prefix": "[Zaakceptowane]", "final": True},
@@ -360,16 +361,21 @@ async def process_decision(interaction: discord.Interaction, original_interactio
         dm_message = f"🎉 Gratulacje! Twoje podanie na **{post_type.replace('Podanie ', '')}** zostało zaakceptowane!"
         member = interaction.guild.get_member(author_id)
         if member:
-            roles_map = {"Podanie Admin JB": ["Junior Admin JB", "Administracja JB"], "Podanie Zaufany JB": ["Zaufany JB", "Administracja JB"], "Podanie Admin DC": ["Admin Discord"]}
-            roles_to_add_names = roles_map.get(post_type, [])
-            roles_to_add = [discord.utils.get(interaction.guild.roles, name=name) for name in roles_to_add_names]
-            await member.add_roles(*[r for r in roles_to_add if r], reason=f"Akceptacja podania: {post_type}")
+            try:
+                roles_map = {"Podanie Admin JB": ["Junior Admin JB", "Administracja JB"], "Podanie Zaufany JB": ["Zaufany JB", "Administracja JB"], "Podanie Admin DC": ["Admin Discord"]}
+                roles_to_add_names = roles_map.get(post_type, [])
+                roles_to_add = [discord.utils.get(interaction.guild.roles, name=name) for name in roles_to_add_names]
+                await member.add_roles(*[r for r in roles_to_add if r], reason=f"Akceptacja podania: {post_type}")
+            except discord.Forbidden:
+                await original_interaction.channel.send(f"⚠️ **Błąd uprawnień!** Nie udało się nadać roli {member.mention}. Upewnij się, że rola bota jest wyżej w hierarchii niż nadawane role.")
+            except Exception as e:
+                print(f"Błąd podczas nadawania roli: {e}")
     elif action == "reject_application":
         dm_message = f"😔 Niestety, Twoje podanie na **{post_type.replace('Podanie ', '')}** zostało odrzucone."
 
     new_view = None if action_details["final"] else ManagementView(post_type, author_id, is_in_progress=True)
     
-    await original_interaction.edit_original_response(embed=original_embed, view=new_view)
+    await original_message.edit(embed=original_embed, view=new_view)
     await original_interaction.channel.send(embed=decision_embed)
 
     if action_details["final"]:
