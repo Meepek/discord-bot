@@ -19,6 +19,10 @@ bot = commands.Bot(command_prefix='!', intents=intents)
 LOG_CHANNEL_ID = None
 POLAND_TZ = pytz.timezone('Europe/Warsaw')
 
+# --- BRANDING ---
+LOGO_URL = "https://imgur.com/a/RxzWXHH" # Wklej tutaj link do swojego logo (np. z Imgur)
+FOOTER_TEXT = "© Aelios2.pl | Bot by Meep"
+
 # --- KONFIGURACJA FUNKCJI ---
 NOTIFICATION_CONFIG = {} 
 REMINDER_CONFIG = {
@@ -203,7 +207,8 @@ async def log_action(guild: discord.Guild, action: str, user: discord.Member, de
     embed.add_field(name="👤 Użytkownik", value=user.mention, inline=True)
     embed.add_field(name="🔧 Akcja", value=action, inline=True)
     if details: embed.add_field(name="📝 Szczegóły", value=details, inline=False)
-    embed.set_footer(text=f"ID: {user.id}")
+    embed.set_thumbnail(url=user.display_avatar.url)
+    embed.set_footer(text=f"ID: {user.id} | {FOOTER_TEXT}")
     try: await log_channel.send(embed=embed)
     except discord.HTTPException: pass
 
@@ -216,6 +221,8 @@ async def send_notification(guild: discord.Guild, post_type: str, thread_url: st
     title = f"⏰ Przypomnienie: {post_type}" if is_reminder else f"🔔 Nowe zgłoszenie: {post_type}"
     description = f"Zgłoszenie czeka na reakcję od ponad {REMINDER_CONFIG['delay_days']} dni.\n\n[Przejdź do posta]({thread_url})" if is_reminder else f"Nowy post czeka na Twoją uwagę.\n\n[Przejdź do posta]({thread_url})"
     embed = discord.Embed(title=title, description=description, color=0xf1c40f if is_reminder else 0x3498db, timestamp=datetime.now(POLAND_TZ))
+    if LOGO_URL: embed.set_thumbnail(url=LOGO_URL)
+    embed.set_footer(text=FOOTER_TEXT)
     try: await channel.send(content=role_mention, embed=embed)
     except discord.HTTPException: pass
 
@@ -337,6 +344,8 @@ async def process_decision(interaction: discord.Interaction, original_interactio
     decision_embed.add_field(name="Rozpatrzył", value=interaction.user.mention, inline=True)
     if reason_text:
         decision_embed.add_field(name="Notatka od administracji", value=reason_text, inline=False)
+    if LOGO_URL: decision_embed.set_thumbnail(url=LOGO_URL)
+    decision_embed.set_footer(text=FOOTER_TEXT)
 
     if action_details["points"] > 0: await update_reputation(author_id, action_details["points"], mode='add')
 
@@ -380,8 +389,8 @@ async def create_generic_post(modal: discord.ui.Modal, interaction: discord.Inte
         embed.add_field(name=item.label, value=item.value, inline=False)
     embed.add_field(name="👤 Autor", value=interaction.user.mention, inline=False)
     embed.add_field(name="📊 Status", value="Oczekuje na decyzję", inline=True)
-    embed.set_thumbnail(url=interaction.user.display_avatar.url)
-    embed.set_footer(text="Użyj menu poniżej, aby zarządzać zgłoszeniem.")
+    if LOGO_URL: embed.set_thumbnail(url=LOGO_URL)
+    embed.set_footer(text=FOOTER_TEXT)
 
     try:
         forum_channel = interaction.channel.parent if isinstance(interaction.channel, discord.Thread) else interaction.channel
@@ -432,6 +441,8 @@ class ForumSelect(discord.ui.Select):
         if choice.startswith("Podanie"):
             requirements_map = {"Podanie Admin JB": "• Minimum 16 lat\n• ...", "Podanie Zaufany JB": "• Minimum 14 lat\n• ...", "Podanie Admin DC": "• Doświadczenie z Discordem\n• ..."}
             embed = discord.Embed(title=f"Wymagania - {choice}", description=requirements_map.get(choice, "Brak zdefiniowanych wymagań."), color=0x5865F2)
+            if LOGO_URL: embed.set_thumbnail(url=LOGO_URL)
+            embed.set_footer(text=FOOTER_TEXT)
             await interaction.response.send_message(embed=embed, view=RequirementsView(choice), ephemeral=True)
 
 class RequirementsView(discord.ui.View):
@@ -562,7 +573,8 @@ class PollButton(discord.ui.Button):
             value_text = "\n".join(voter_mentions) if voter_mentions else "Brak głosów"
             if len(value_text) > 1024: value_text = value_text[:1020] + "\n..."
             new_embed.add_field(name=f"{option_text} ({len(voter_ids)})", value=value_text, inline=False)
-        new_embed.set_footer(text=f"Ankieta stworzona przez: {author.display_name}")
+        new_embed.set_footer(text=f"Ankieta stworzona przez: {author.display_name} | {FOOTER_TEXT}")
+        if LOGO_URL: new_embed.set_thumbnail(url=LOGO_URL)
         await interaction.edit_original_response(embed=new_embed)
 
 # --- SYSTEM SKLEPU ---
@@ -588,7 +600,8 @@ async def create_shop_embed(category: str):
                     stock_info = " (Wyprzedane)"
             description += f"**ID: {item_id} | {name}{stock_info}** - `{cost} rep.`\n*_{desc}_*\n\n"
         embed.description = description
-    embed.set_footer(text="Użyj menu poniżej, aby wybrać przedmiot do zakupu.")
+    if LOGO_URL: embed.set_thumbnail(url=LOGO_URL)
+    embed.set_footer(text=FOOTER_TEXT)
     return embed
 
 class ShopView(discord.ui.View):
@@ -702,7 +715,8 @@ class ShopItemSelect(discord.ui.Select):
                     embed.add_field(name="Kupujący", value=interaction.user.mention, inline=False)
                     embed.add_field(name="Przedmiot", value=f"{item_name} (ID: {item_id})", inline=False)
                     embed.add_field(name="Koszt", value=f"{item_cost} reputacji", inline=False)
-                    embed.set_footer(text="Proszę o ręczne nadanie nagrody!")
+                    embed.set_footer(text=FOOTER_TEXT)
+                    if LOGO_URL: embed.set_thumbnail(url=LOGO_URL)
                     await notif_channel.send(content=role_mentions, embed=embed)
         
         await log_action(interaction.guild, "Zakup w sklepie", interaction.user, f"Przedmiot: {item_name}, Koszt: {item_cost} rep.")
@@ -737,6 +751,8 @@ async def setup_przypomnienia(interaction: discord.Interaction, wlaczone: bool, 
 @app_commands.checks.has_permissions(administrator=True)
 async def setup_forum_propozycje(interaction: discord.Interaction, kanal_forum: discord.ForumChannel):
     embed = discord.Embed(title="💡 Propozycje i Błędy 🐛", description="Masz pomysł na ulepszenie serwera lub znalazłeś błąd? Użyj menu poniżej!", color=0x5865F2)
+    if LOGO_URL: embed.set_thumbnail(url=LOGO_URL)
+    embed.set_footer(text=FOOTER_TEXT)
     await kanal_forum.create_thread(name="Panel Zgłoszeń - Propozycje i Błędy", embed=embed, view=ForumSelectionView("proposals_bugs"))
     await interaction.response.send_message(f"✅ Panel utworzony na {kanal_forum.mention}!", ephemeral=True)
 
@@ -744,6 +760,8 @@ async def setup_forum_propozycje(interaction: discord.Interaction, kanal_forum: 
 @app_commands.checks.has_permissions(administrator=True)
 async def setup_forum_skargi(interaction: discord.Interaction, kanal_forum: discord.ForumChannel):
     embed = discord.Embed(title="⚠️ Skargi i Odwołania 🔓", description="Chcesz złożyć skargę lub odwołać się od kary? Użyj menu poniżej.", color=0xED4245)
+    if LOGO_URL: embed.set_thumbnail(url=LOGO_URL)
+    embed.set_footer(text=FOOTER_TEXT)
     await kanal_forum.create_thread(name="Panel Zgłoszeń - Skargi i Odwołania", embed=embed, view=ForumSelectionView("complaints_appeals"))
     await interaction.response.send_message(f"✅ Panel utworzony na {kanal_forum.mention}!", ephemeral=True)
 
@@ -751,6 +769,8 @@ async def setup_forum_skargi(interaction: discord.Interaction, kanal_forum: disc
 @app_commands.checks.has_permissions(administrator=True)
 async def setup_forum_rekrutacje(interaction: discord.Interaction, kanal_forum: discord.ForumChannel):
     embed = discord.Embed(title="📝 Centrum Rekrutacji", description="Chcesz dołączyć do ekipy? Wybierz stanowisko z menu poniżej.", color=0x2ecc71)
+    if LOGO_URL: embed.set_thumbnail(url=LOGO_URL)
+    embed.set_footer(text=FOOTER_TEXT)
     await kanal_forum.create_thread(name="Panel Rekrutacyjny", embed=embed, view=ForumSelectionView("recruitment"))
     await interaction.response.send_message(f"✅ Panel rekrutacyjny utworzony na {kanal_forum.mention}!", ephemeral=True)
 
@@ -771,6 +791,7 @@ async def info(interaction: discord.Interaction, uzytkownik: discord.Member):
         count = cursor.fetchone()[0]
         if count > 0: embed.add_field(name=name, value=str(count), inline=True)
     conn.close()
+    embed.set_footer(text=FOOTER_TEXT)
     await interaction.followup.send(embed=embed)
 
 @bot.tree.command(name="moje_zgłoszenia", description="Wyświetla listę Twoich zgłoszeń i ich status.")
@@ -779,6 +800,8 @@ async def moje_zgłoszenia(interaction: discord.Interaction):
     conn = sqlite3.connect('/data/bot_database.db')
     cursor = conn.cursor()
     embed = discord.Embed(title=f"📝 Twoje zgłoszenia", color=interaction.user.color, timestamp=datetime.now(POLAND_TZ))
+    if LOGO_URL: embed.set_thumbnail(url=LOGO_URL)
+    embed.set_footer(text=FOOTER_TEXT)
     tables_map = {"Propozycje": ("suggestions", "category", "status"), "Błędy": ("bug_reports", "category", "status"), "Skargi": ("complaints", "complaint_type", "status"), "Odwołania": ("appeals", "appeal_type", "status"), "Podania": ("applications", "application_type", "status")}
     content = ""
     for name, (table, type_col, status_col) in tables_map.items():
@@ -806,7 +829,8 @@ async def ankieta(interaction: discord.Interaction, pytanie: str, opcje: str):
     embed = discord.Embed(title="📊 Ankieta", description=f"**{pytanie}**", color=0x3498db)
     for opt in options_list:
         embed.add_field(name=f"{opt} (0)", value="Brak głosów", inline=False)
-    embed.set_footer(text=f"Ankieta stworzona przez: {interaction.user.display_name}")
+    embed.set_footer(text=f"Ankieta stworzona przez: {interaction.user.display_name} | {FOOTER_TEXT}")
+    if LOGO_URL: embed.set_thumbnail(url=LOGO_URL)
     
     await interaction.response.send_message("Tworzenie ankiety...", ephemeral=True)
     message = await interaction.channel.send(embed=embed)
@@ -890,6 +914,8 @@ async def ranking(interaction: discord.Interaction):
     conn.close()
 
     embed = discord.Embed(title="🏆 Ranking Reputacji - Top 10", color=0xf1c40f)
+    if LOGO_URL: embed.set_thumbnail(url=LOGO_URL)
+    embed.set_footer(text=FOOTER_TEXT)
     
     if not top_users:
         embed.description = "Ranking jest pusty. Bądź pierwszy i zdobądź reputację!"
