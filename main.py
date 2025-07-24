@@ -556,6 +556,107 @@ class PollButton(discord.ui.Button):
         new_embed.set_footer(text=f"Ankieta stworzona przez: {author.display_name}")
         await interaction.edit_original_response(embed=new_embed)
 
+# --- SYSTEM SKLEPU ---
+async def create_shop_embed(category: str):
+    """Tworzy embed dla wybranej kategorii sklepu."""
+    conn = sqlite3.connect('/data/bot_database.db')
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, name, cost, description FROM shop_items WHERE category = ? ORDER BY cost ASC", (category,))
+    items = cursor.fetchall()
+    conn.close()
+
+    embed = discord.Embed(title=f"🛒 Sklep - Kategoria: {category}", color=0x2ecc71)
+    if not items:
+        embed.description = "Brak przedmiotów w tej kategorii."
+    else:
+        description = ""
+        for item in items:
+            description += f"**ID: {item[0]} | {item[1]}** - `{item[2]} pkt.`\n*_{item[3]}_*\n\n"
+        embed.description = description
+    embed.set_footer(text="Użyj menu poniżej, aby wybrać przedmiot do zakupu.")
+    return embed
+
+class ShopView(discord.ui.View):
+    def __init__(self, initial_category: Optional[str] = None):
+        super().__init__(timeout=None)
+        self.add_item(ShopCategorySelect())
+        if initial_category:
+            self.add_item(ShopItemSelect(category=initial_category))
+
+class ShopCategorySelect(discord.ui.Select):
+    def __init__(self):
+        options = [discord.SelectOption(label=cat, value=cat) for cat in SHOP_CATEGORIES]
+        super().__init__(placeholder="Wybierz kategorię sklepu...", min_values=1, max_values=1, options=options, custom_id="shop_category_select")
+
+    async def callback(self, interaction: discord.Interaction):
+        await interaction.response.defer()
+        selected_category = self.values[0]
+        
+        new_embed = await create_shop_embed(selected_category)
+        new_view = ShopView(initial_category=selected_category)
+        
+        await interaction.edit_original_response(embed=new_embed, view=new_view)
+
+class ShopItemSelect(discord.ui.Select):
+    def __init__(self, category: str):
+        super().__init__(placeholder="Wybierz przedmiot, który chcesz kupić...", min_values=1, max_values=1, custom_id="shop_item_select")
+        self.category = category
+        self.load_items()
+
+    def load_items(self):
+        conn = sqlite3.connect('/data/bot_database.db')
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, name, cost FROM shop_items WHERE category = ? ORDER BY cost ASC", (self.category,))
+        items = cursor.fetchall()
+        conn.close()
+        
+        options = []
+        if not items:
+            options.append(discord.SelectOption(label="Brak przedmiotów w tej kategorii", value="disabled", default=True))
+            self.disabled = True
+        else:
+            for item_id, name, cost in items:
+                options.append(discord.SelectOption(label=f"{name} ({cost} pkt.)", value=str(item_id)))
+        self.options = options
+
+    async def callback(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        item_id = int(self.values[0])
+        
+        conn = sqlite3.connect('/data/bot_database.db')
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT name, cost FROM shop_items WHERE id = ?", (item_id,))
+        item = cursor.fetchone()
+        item_name, item_cost = item
+
+        cursor.execute("SELECT points FROM reputation_points WHERE user_id = ?", (str(interaction.user.id),))
+        user_points_row = cursor.fetchone()
+        user_points = user_points_row[0] if user_points_row else 0
+
+        if user_points < item_cost:
+            await interaction.followup.send(f"❌ Nie masz wystarczającej liczby punktów! Potrzebujesz **{item_cost}**, a masz **{user_points}**.")
+            conn.close()
+            return
+
+        new_points = user_points - item_cost
+        cursor.execute("UPDATE reputation_points SET points = ? WHERE user_id = ?", (new_points, str(interaction.user.id)))
+        conn.commit()
+        conn.close()
+
+        await interaction.followup.send(f"✅ Gratulacje! Kupiłeś **{item_name}** za **{item_cost}** punktów. Twoje saldo: **{new_points}** pkt.\nAdministracja została powiadomiona i wkrótce otrzymasz swoją nagrodę.")
+
+        if SHOP_CONFIG.get("channel_id") and SHOP_CONFIG.get("role_id"):
+            notif_channel = bot.get_channel(SHOP_CONFIG["channel_id"])
+            if notif_channel:
+                role_mention = f"<@&{SHOP_CONFIG['role_id']}>"
+                embed = discord.Embed(title="🛍️ Nowy zakup w sklepie!", color=0x2ecc71, timestamp=datetime.now(POLAND_TZ))
+                embed.add_field(name="Kupujący", value=interaction.user.mention, inline=False)
+                embed.add_field(name="Przedmiot", value=f"{item_name} (ID: {item_id})", inline=False)
+                embed.add_field(name="Koszt", value=f"{item_cost} punktów reputacji", inline=False)
+                embed.set_footer(text="Proszę o ręczne nadanie nagrody!")
+                await notif_channel.send(content=role_mention, embed=embed)
+
 # --- KOMENDY SLASH ---
 @bot.tree.command(name="setup_logi", description="Konfiguruje kanał logów bota.")
 @app_commands.checks.has_permissions(administrator=True)
@@ -730,7 +831,7 @@ async def ranking(interaction: discord.Interaction):
         embed.description = "Ranking jest pusty. Bądź pierwszy i zdobądź punkty!"
     else:
         description = ""
-        medals = ["🥇", "🥈", "�"]
+        medals = ["🥇", "🥈", "🥉"]
         for i, (user_id, points) in enumerate(top_users):
             user = interaction.guild.get_member(int(user_id))
             user_name = user.display_name if user else f"Użytkownik (ID: {user_id})"
