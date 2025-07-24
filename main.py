@@ -704,6 +704,9 @@ class ShopItemSelect(discord.ui.Select):
                     embed.add_field(name="Koszt", value=f"{item_cost} reputacji", inline=False)
                     embed.set_footer(text="Proszę o ręczne nadanie nagrody!")
                     await notif_channel.send(content=role_mentions, embed=embed)
+        
+        await log_action(interaction.guild, "Zakup w sklepie", interaction.user, f"Przedmiot: {item_name}, Koszt: {item_cost} rep.")
+
 
 # --- GRUPA KOMEND SLASH ---
 reputation_group = app_commands.Group(name="reputacja", description="Zarządzanie reputacją użytkowników.")
