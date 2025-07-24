@@ -19,9 +19,15 @@ bot = commands.Bot(command_prefix='!', intents=intents)
 LOG_CHANNEL_ID = None
 POLAND_TZ = pytz.timezone('Europe/Warsaw')
 
-# --- BRANDING ---
-LOGO_URL = "https://imgur.com/R81ZCMN.png" # Wklej tutaj link do swojego logo (np. z Imgur)
+# --- BRANDING & COLORS ---
+LOGO_URL = "https://imgur.com/PpizE6t.png" 
 FOOTER_TEXT = "© Aelios2.pl | Bot by Meep"
+COLORS = {
+    "main": 0xE67E22,      # Pomarańczowy
+    "success": 0x2ECC71,   # Zielony
+    "error": 0xE74C3C,     # Czerwony
+    "warn": 0xF1C40F,      # Żółty
+}
 
 # --- KONFIGURACJA FUNKCJI ---
 NOTIFICATION_CONFIG = {} 
@@ -31,7 +37,7 @@ REMINDER_CONFIG = {
 }
 SHOP_CONFIG = {
     "channel_id": None,
-    "manual_reward_roles": ["Opiekun JB", "Zarząd", "Właściciel"] # Role do pingowania przy ręcznych nagrodach
+    "manual_reward_roles": ["Opiekun JB", "Zarząd", "Właściciel"] 
 }
 SHOP_CATEGORIES = ["Specjalne role", "VIP", "Premium", "Fajki", "Oferty Dnia", "Inne"]
 
@@ -203,7 +209,7 @@ async def log_action(guild: discord.Guild, action: str, user: discord.Member, de
     if not LOG_CHANNEL_ID: return
     log_channel = guild.get_channel(LOG_CHANNEL_ID)
     if not log_channel: return
-    embed = discord.Embed(title="📋 Log Akcji", color=0x3498db, timestamp=datetime.now(POLAND_TZ))
+    embed = discord.Embed(title="📋 Log Akcji", color=COLORS["main"], timestamp=datetime.now(POLAND_TZ))
     embed.add_field(name="👤 Użytkownik", value=user.mention, inline=True)
     embed.add_field(name="🔧 Akcja", value=action, inline=True)
     if details: embed.add_field(name="📝 Szczegóły", value=details, inline=False)
@@ -220,7 +226,7 @@ async def send_notification(guild: discord.Guild, post_type: str, thread_url: st
     role_mention = f"<@&{config['role_id']}>" if config.get('role_id') else ""
     title = f"⏰ Przypomnienie: {post_type}" if is_reminder else f"🔔 Nowe zgłoszenie: {post_type}"
     description = f"Zgłoszenie czeka na reakcję od ponad {REMINDER_CONFIG['delay_days']} dni.\n\n[Przejdź do posta]({thread_url})" if is_reminder else f"Nowy post czeka na Twoją uwagę.\n\n[Przejdź do posta]({thread_url})"
-    embed = discord.Embed(title=title, description=description, color=0xf1c40f if is_reminder else 0x3498db, timestamp=datetime.now(POLAND_TZ))
+    embed = discord.Embed(title=title, description=description, color=COLORS["warn"] if is_reminder else COLORS["main"], timestamp=datetime.now(POLAND_TZ))
     if LOGO_URL: embed.set_thumbnail(url=LOGO_URL)
     embed.set_footer(text=FOOTER_TEXT)
     try: await channel.send(content=role_mention, embed=embed)
@@ -317,17 +323,17 @@ async def process_decision(interaction: discord.Interaction, original_interactio
     original_embed = original_interaction.message.embeds[0]
     
     action_map = {
-        "accept_suggestion": {"text": "Propozycja przyjęta", "color": 0x2ecc71, "points": 5, "prefix": "[Zaakceptowane]", "final": True},
-        "reject_suggestion": {"text": "Propozycja odrzucona", "color": 0xe74c3c, "points": 0, "prefix": "[Odrzucone]", "final": True},
-        "accept_bug":        {"text": "W trakcie naprawy", "color": 0x3498db, "points": 0, "prefix": "[W trakcie]", "final": False},
-        "resolve_bug":       {"text": "Naprawiony", "color": 0x2ecc71, "points": 3, "prefix": "[Naprawione]", "final": True},
-        "reject_bug":        {"text": "Zgłoszenie odrzucone", "color": 0xe74c3c, "points": 0, "prefix": "[Odrzucone]", "final": True},
-        "accept_complaint":  {"text": "Skarga rozpatrzona pozytywnie", "color": 0x2ecc71, "points": 0, "prefix": "[Zaakceptowane]", "final": True},
-        "reject_complaint":  {"text": "Skarga odrzucona", "color": 0xe74c3c, "points": 0, "prefix": "[Odrzucone]", "final": True},
-        "accept_appeal":     {"text": "Odwołanie zaakceptowane", "color": 0x2ecc71, "points": 0, "prefix": "[Zaakceptowane]", "final": True},
-        "reject_appeal":     {"text": "Odwołanie odrzucone", "color": 0xe74c3c, "points": 0, "prefix": "[Odrzucone]", "final": True},
-        "accept_application": {"text": "Podanie przyjęte", "color": 0x2ecc71, "points": 0, "prefix": "[Zaakceptowane]", "final": True},
-        "reject_application": {"text": "Podanie odrzucone", "color": 0xe74c3c, "points": 0, "prefix": "[Odrzucone]", "final": True},
+        "accept_suggestion": {"text": "Propozycja przyjęta", "color": COLORS["success"], "points": 5, "prefix": "[Zaakceptowane]", "final": True},
+        "reject_suggestion": {"text": "Propozycja odrzucona", "color": COLORS["error"], "points": 0, "prefix": "[Odrzucone]", "final": True},
+        "accept_bug":        {"text": "W trakcie naprawy", "color": COLORS["warn"], "points": 0, "prefix": "[W trakcie]", "final": False},
+        "resolve_bug":       {"text": "Naprawiony", "color": COLORS["success"], "points": 3, "prefix": "[Naprawione]", "final": True},
+        "reject_bug":        {"text": "Zgłoszenie odrzucone", "color": COLORS["error"], "points": 0, "prefix": "[Odrzucone]", "final": True},
+        "accept_complaint":  {"text": "Skarga rozpatrzona pozytywnie", "color": COLORS["success"], "points": 0, "prefix": "[Zaakceptowane]", "final": True},
+        "reject_complaint":  {"text": "Skarga odrzucona", "color": COLORS["error"], "points": 0, "prefix": "[Odrzucone]", "final": True},
+        "accept_appeal":     {"text": "Odwołanie zaakceptowane", "color": COLORS["success"], "points": 0, "prefix": "[Zaakceptowane]", "final": True},
+        "reject_appeal":     {"text": "Odwołanie odrzucone", "color": COLORS["error"], "points": 0, "prefix": "[Odrzucone]", "final": True},
+        "accept_application": {"text": "Podanie przyjęte", "color": COLORS["success"], "points": 0, "prefix": "[Zaakceptowane]", "final": True},
+        "reject_application": {"text": "Podanie odrzucone", "color": COLORS["error"], "points": 0, "prefix": "[Odrzucone]", "final": True},
     }
     
     action_details = action_map.get(action)
@@ -339,7 +345,7 @@ async def process_decision(interaction: discord.Interaction, original_interactio
             original_embed.set_field_at(i, name="📊 Status", value=action_details["text"], inline=True)
             break
     
-    decision_embed = discord.Embed(title="Decyzja podjęta!", color=action_details["color"])
+    decision_embed = discord.Embed(title="✅ Decyzja podjęta!", color=action_details["color"])
     decision_embed.add_field(name="Status", value=action_details["text"], inline=True)
     decision_embed.add_field(name="Rozpatrzył", value=interaction.user.mention, inline=True)
     if reason_text:
@@ -384,12 +390,12 @@ async def process_decision(interaction: discord.Interaction, original_interactio
 # --- FUNKCJE TWORZĄCE POSTY ---
 async def create_generic_post(modal: discord.ui.Modal, interaction: discord.Interaction, post_type: str, emoji: str):
     await interaction.response.defer(ephemeral=True)
-    embed = discord.Embed(title=f"{emoji} Nowe zgłoszenie: {post_type}", color=0x3498db, timestamp=datetime.now(POLAND_TZ))
+    embed = discord.Embed(title=f"{emoji} Nowe zgłoszenie: {post_type}", color=COLORS["main"], timestamp=datetime.now(POLAND_TZ))
     for item in modal.children:
         embed.add_field(name=item.label, value=item.value, inline=False)
     embed.add_field(name="👤 Autor", value=interaction.user.mention, inline=False)
     embed.add_field(name="📊 Status", value="Oczekuje na decyzję", inline=True)
-    if LOGO_URL: embed.set_thumbnail(url=LOGO_URL)
+    embed.set_thumbnail(url=interaction.user.display_avatar.url) # Używamy avatara autora
     embed.set_footer(text=FOOTER_TEXT)
 
     try:
@@ -440,7 +446,7 @@ class ForumSelect(discord.ui.Select):
         if choice in modal_map: await interaction.response.send_modal(modal_map[choice](choice)); return
         if choice.startswith("Podanie"):
             requirements_map = {"Podanie Admin JB": "• Minimum 16 lat\n• ...", "Podanie Zaufany JB": "• Minimum 14 lat\n• ...", "Podanie Admin DC": "• Doświadczenie z Discordem\n• ..."}
-            embed = discord.Embed(title=f"Wymagania - {choice}", description=requirements_map.get(choice, "Brak zdefiniowanych wymagań."), color=0x5865F2)
+            embed = discord.Embed(title=f"📝 Wymagania - {choice}", description=requirements_map.get(choice, "Brak zdefiniowanych wymagań."), color=COLORS["main"])
             if LOGO_URL: embed.set_thumbnail(url=LOGO_URL)
             embed.set_footer(text=FOOTER_TEXT)
             await interaction.response.send_message(embed=embed, view=RequirementsView(choice), ephemeral=True)
@@ -566,7 +572,7 @@ class PollButton(discord.ui.Button):
         question, options, author_id = poll_data
         options, author = json.loads(options), interaction.guild.get_member(author_id) or await bot.fetch_user(author_id)
 
-        new_embed = discord.Embed(title="📊 Ankieta", description=f"**{question}**", color=0x3498db)
+        new_embed = discord.Embed(title="📊 Ankieta", description=f"**{question}**", color=COLORS["main"])
         for i, option_text in enumerate(options):
             voter_ids = votes.get(str(i), [])
             voter_mentions = [f"<@{uid}>" for uid in voter_ids]
@@ -586,7 +592,7 @@ async def create_shop_embed(category: str):
     items = cursor.fetchall()
     conn.close()
 
-    embed = discord.Embed(title=f"🛒 Sklep - Kategoria: {category}", color=0x2ecc71)
+    embed = discord.Embed(title=f"🛒 Sklep - Kategoria: {category}", color=COLORS["main"])
     if not items:
         embed.description = "Brak przedmiotów w tej kategorii."
     else:
@@ -711,12 +717,12 @@ class ShopItemSelect(discord.ui.Select):
                     roles_to_mention = [discord.utils.get(interaction.guild.roles, name=r_name) for r_name in SHOP_CONFIG["manual_reward_roles"]]
                     role_mentions = " ".join([r.mention for r in roles_to_mention if r])
                     
-                    embed = discord.Embed(title="🛍️ Nowy zakup w sklepie!", color=0x2ecc71, timestamp=datetime.now(POLAND_TZ))
+                    embed = discord.Embed(title="🛍️ Nowy zakup w sklepie!", color=COLORS["success"], timestamp=datetime.now(POLAND_TZ))
                     embed.add_field(name="Kupujący", value=interaction.user.mention, inline=False)
                     embed.add_field(name="Przedmiot", value=f"{item_name} (ID: {item_id})", inline=False)
                     embed.add_field(name="Koszt", value=f"{item_cost} reputacji", inline=False)
                     embed.set_footer(text=FOOTER_TEXT)
-                    if LOGO_URL: embed.set_thumbnail(url=LOGO_URL)
+                    embed.set_thumbnail(url=interaction.user.display_avatar.url)
                     await notif_channel.send(content=role_mentions, embed=embed)
         
         await log_action(interaction.guild, "Zakup w sklepie", interaction.user, f"Przedmiot: {item_name}, Koszt: {item_cost} rep.")
@@ -750,7 +756,7 @@ async def setup_przypomnienia(interaction: discord.Interaction, wlaczone: bool, 
 @bot.tree.command(name="setup_forum_propozycje", description="Tworzy panel zgłaszania propozycji i błędów.")
 @app_commands.checks.has_permissions(administrator=True)
 async def setup_forum_propozycje(interaction: discord.Interaction, kanal_forum: discord.ForumChannel):
-    embed = discord.Embed(title="💡 Propozycje i Błędy 🐛", description="Masz pomysł na ulepszenie serwera lub znalazłeś błąd? Użyj menu poniżej!", color=0x5865F2)
+    embed = discord.Embed(title="💡 Propozycje i Błędy 🐛", description="Masz pomysł na ulepszenie serwera lub znalazłeś błąd? Użyj menu poniżej!", color=COLORS["main"])
     if LOGO_URL: embed.set_thumbnail(url=LOGO_URL)
     embed.set_footer(text=FOOTER_TEXT)
     await kanal_forum.create_thread(name="Panel Zgłoszeń - Propozycje i Błędy", embed=embed, view=ForumSelectionView("proposals_bugs"))
@@ -759,7 +765,7 @@ async def setup_forum_propozycje(interaction: discord.Interaction, kanal_forum: 
 @bot.tree.command(name="setup_forum_skargi", description="Tworzy panel składania skarg i odwołań.")
 @app_commands.checks.has_permissions(administrator=True)
 async def setup_forum_skargi(interaction: discord.Interaction, kanal_forum: discord.ForumChannel):
-    embed = discord.Embed(title="⚠️ Skargi i Odwołania 🔓", description="Chcesz złożyć skargę lub odwołać się od kary? Użyj menu poniżej.", color=0xED4245)
+    embed = discord.Embed(title="⚠️ Skargi i Odwołania 🔓", description="Chcesz złożyć skargę lub odwołać się od kary? Użyj menu poniżej.", color=COLORS["main"])
     if LOGO_URL: embed.set_thumbnail(url=LOGO_URL)
     embed.set_footer(text=FOOTER_TEXT)
     await kanal_forum.create_thread(name="Panel Zgłoszeń - Skargi i Odwołania", embed=embed, view=ForumSelectionView("complaints_appeals"))
@@ -768,7 +774,7 @@ async def setup_forum_skargi(interaction: discord.Interaction, kanal_forum: disc
 @bot.tree.command(name="setup_forum_rekrutacje", description="Tworzy panel rekrutacyjny na kanale forum.")
 @app_commands.checks.has_permissions(administrator=True)
 async def setup_forum_rekrutacje(interaction: discord.Interaction, kanal_forum: discord.ForumChannel):
-    embed = discord.Embed(title="📝 Centrum Rekrutacji", description="Chcesz dołączyć do ekipy? Wybierz stanowisko z menu poniżej.", color=0x2ecc71)
+    embed = discord.Embed(title="📝 Centrum Rekrutacji", description="Chcesz dołączyć do ekipy? Wybierz stanowisko z menu poniżej.", color=COLORS["main"])
     if LOGO_URL: embed.set_thumbnail(url=LOGO_URL)
     embed.set_footer(text=FOOTER_TEXT)
     await kanal_forum.create_thread(name="Panel Rekrutacyjny", embed=embed, view=ForumSelectionView("recruitment"))
@@ -826,7 +832,7 @@ async def ankieta(interaction: discord.Interaction, pytanie: str, opcje: str):
         await interaction.response.send_message("❌ Ankieta musi mieć co najmniej 2 opcje.", ephemeral=True)
         return
 
-    embed = discord.Embed(title="📊 Ankieta", description=f"**{pytanie}**", color=0x3498db)
+    embed = discord.Embed(title="📊 Ankieta", description=f"**{pytanie}**", color=COLORS["main"])
     for opt in options_list:
         embed.add_field(name=f"{opt} (0)", value="Brak głosów", inline=False)
     embed.set_footer(text=f"Ankieta stworzona przez: {interaction.user.display_name} | {FOOTER_TEXT}")
@@ -913,7 +919,7 @@ async def ranking(interaction: discord.Interaction):
     top_users = cursor.fetchall()
     conn.close()
 
-    embed = discord.Embed(title="🏆 Ranking Reputacji - Top 10", color=0xf1c40f)
+    embed = discord.Embed(title="🏆 Ranking Reputacji - Top 10", color=COLORS["main"])
     if LOGO_URL: embed.set_thumbnail(url=LOGO_URL)
     embed.set_footer(text=FOOTER_TEXT)
     
