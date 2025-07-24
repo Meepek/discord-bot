@@ -29,7 +29,7 @@ SHOP_CONFIG = {
     "channel_id": None,
     "role_id": None
 }
-SHOP_CATEGORIES = ["VIP", "Premium", "Fajki", "Oferty Dnia", "Inne"]
+SHOP_CATEGORIES = ["Role", "VIP", "Premium", "Fajki", "Oferty Dnia", "Inne"]
 
 # --- SZABLONY ODPOWIEDZI ---
 RESPONSE_TEMPLATES = {
@@ -109,7 +109,8 @@ def init_database():
             name TEXT NOT NULL,
             description TEXT,
             cost INTEGER NOT NULL,
-            category TEXT NOT NULL
+            category TEXT NOT NULL,
+            role_id INTEGER DEFAULT NULL
         )''')
     
     tables_to_alter = {
@@ -633,9 +634,9 @@ class ShopItemSelect(discord.ui.Select):
         conn = sqlite3.connect('/data/bot_database.db')
         cursor = conn.cursor()
         
-        cursor.execute("SELECT name, cost FROM shop_items WHERE id = ?", (item_id,))
+        cursor.execute("SELECT name, cost, role_id FROM shop_items WHERE id = ?", (item_id,))
         item = cursor.fetchone()
-        item_name, item_cost = item
+        item_name, item_cost, role_id = item
 
         cursor.execute("SELECT points FROM reputation_points WHERE user_id = ?", (str(interaction.user.id),))
         user_points_row = cursor.fetchone()
@@ -651,18 +652,36 @@ class ShopItemSelect(discord.ui.Select):
         conn.commit()
         conn.close()
 
-        await interaction.followup.send(f"✅ Gratulacje! Kupiłeś **{item_name}** za **{item_cost}** reputacji. Twoje saldo: **{new_points}** rep.\nAdministracja została powiadomiona i wkrótce otrzymasz swoją nagrodę.")
-
-        if SHOP_CONFIG.get("channel_id") and SHOP_CONFIG.get("role_id"):
-            notif_channel = bot.get_channel(SHOP_CONFIG["channel_id"])
-            if notif_channel:
-                role_mention = f"<@&{SHOP_CONFIG['role_id']}>"
-                embed = discord.Embed(title="🛍️ Nowy zakup w sklepie!", color=0x2ecc71, timestamp=datetime.now(POLAND_TZ))
-                embed.add_field(name="Kupujący", value=interaction.user.mention, inline=False)
-                embed.add_field(name="Przedmiot", value=f"{item_name} (ID: {item_id})", inline=False)
-                embed.add_field(name="Koszt", value=f"{item_cost} reputacji", inline=False)
-                embed.set_footer(text="Proszę o ręczne nadanie nagrody!")
-                await notif_channel.send(content=role_mention, embed=embed)
+        # Logika nadawania nagrody
+        if role_id:
+            try:
+                role_to_add = interaction.guild.get_role(role_id)
+                if role_to_add:
+                    await interaction.user.add_roles(role_to_add, reason="Zakup w sklepie reputacji")
+                    await interaction.followup.send(f"✅ Gratulacje! Kupiłeś i otrzymałeś rolę **{item_name}** za **{item_cost}** reputacji. Twoje saldo: **{new_points}** rep.")
+                else:
+                    raise ValueError("Rola nie znaleziona")
+            except Exception as e:
+                print(f"Błąd podczas nadawania roli ze sklepu: {e}")
+                await interaction.followup.send(f"✅ Zakupiono **{item_name}**, ale wystąpił błąd przy nadawaniu roli. Administracja została powiadomiona.")
+                # Powiadomienie adminów jako fallback
+                if SHOP_CONFIG.get("channel_id"):
+                    notif_channel = bot.get_channel(SHOP_CONFIG["channel_id"])
+                    if notif_channel:
+                        await notif_channel.send(f"⚠️ **Błąd automatyzacji!** Użytkownik {interaction.user.mention} kupił rolę `{item_name}`, ale nie udało się jej nadać. Proszę o ręczne nadanie.")
+        else:
+            # Standardowe powiadomienie dla przedmiotów bez roli
+            await interaction.followup.send(f"✅ Gratulacje! Kupiłeś **{item_name}** za **{item_cost}** reputacji. Twoje saldo: **{new_points}** rep.\nAdministracja została powiadomiona i wkrótce otrzymasz swoją nagrodę.")
+            if SHOP_CONFIG.get("channel_id") and SHOP_CONFIG.get("role_id"):
+                notif_channel = bot.get_channel(SHOP_CONFIG["channel_id"])
+                if notif_channel:
+                    role_mention = f"<@&{SHOP_CONFIG['role_id']}>"
+                    embed = discord.Embed(title="🛍️ Nowy zakup w sklepie!", color=0x2ecc71, timestamp=datetime.now(POLAND_TZ))
+                    embed.add_field(name="Kupujący", value=interaction.user.mention, inline=False)
+                    embed.add_field(name="Przedmiot", value=f"{item_name} (ID: {item_id})", inline=False)
+                    embed.add_field(name="Koszt", value=f"{item_cost} reputacji", inline=False)
+                    embed.set_footer(text="Proszę o ręczne nadanie nagrody!")
+                    await notif_channel.send(content=role_mention, embed=embed)
 
 # --- GRUPA KOMEND SLASH ---
 reputation_group = app_commands.Group(name="reputacja", description="Zarządzanie reputacją użytkowników.")
@@ -787,22 +806,40 @@ async def setup_powiadomienia_sklep(interaction: discord.Interaction, kanal: dis
     SHOP_CONFIG["role_id"] = rola.id
     await interaction.response.send_message(f"✅ Skonfigurowano powiadomienia o zakupach na kanale {kanal.mention} z rolą {rola.mention}.", ephemeral=True)
 
-@bot.tree.command(name="dodaj_przedmiot", description="Dodaje nowy przedmiot do sklepu reputacji.")
+@bot.tree.command(name="dodaj_przedmiot", description="Dodaje przedmiot do sklepu (wymaga ręcznego nadania).")
 @app_commands.checks.has_permissions(administrator=True)
-@app_commands.describe(kategoria="Kategoria przedmiotu", nazwa="Nazwa przedmiotu", koszt="Cena w punktach reputacji", opis="Opis przedmiotu")
+@app_commands.describe(kategoria="Kategoria przedmiotu", nazwa="Nazwa przedmiotu", koszt="Cena w reputacji", opis="Opis przedmiotu")
 async def dodaj_przedmiot(interaction: discord.Interaction, kategoria: str, nazwa: str, koszt: app_commands.Range[int, 1], opis: str):
     if kategoria not in SHOP_CATEGORIES:
         await interaction.response.send_message(f"❌ Nieprawidłowa kategoria. Dostępne kategorie: {', '.join(SHOP_CATEGORIES)}", ephemeral=True)
         return
     conn = sqlite3.connect('/data/bot_database.db')
     cursor = conn.cursor()
-    cursor.execute("INSERT INTO shop_items (name, cost, description, category) VALUES (?, ?, ?, ?)", (nazwa, koszt, opis, kategoria))
+    cursor.execute("INSERT INTO shop_items (name, cost, description, category, role_id) VALUES (?, ?, ?, ?, NULL)", (nazwa, koszt, opis, kategoria))
     conn.commit()
     conn.close()
-    await interaction.response.send_message(f"✅ Dodano przedmiot `{nazwa}` do kategorii `{kategoria}` za **{koszt}** reputacji.", ephemeral=True)
+    await interaction.response.send_message(f"✅ Dodano przedmiot `{nazwa}` (ręczna nagroda) do kategorii `{kategoria}` za **{koszt}** reputacji.", ephemeral=True)
+
+@bot.tree.command(name="dodaj_role_do_sklepu", description="Dodaje rolę do sklepu (nadawana automatycznie).")
+@app_commands.checks.has_permissions(administrator=True)
+@app_commands.describe(kategoria="Kategoria przedmiotu", nazwa="Nazwa przedmiotu", koszt="Cena w reputacji", rola="Rola do nadania", opis="Opis przedmiotu")
+async def dodaj_role_do_sklepu(interaction: discord.Interaction, kategoria: str, nazwa: str, koszt: app_commands.Range[int, 1], rola: discord.Role, opis: str):
+    if kategoria not in SHOP_CATEGORIES:
+        await interaction.response.send_message(f"❌ Nieprawidłowa kategoria. Dostępne kategorie: {', '.join(SHOP_CATEGORIES)}", ephemeral=True)
+        return
+    conn = sqlite3.connect('/data/bot_database.db')
+    cursor = conn.cursor()
+    cursor.execute("INSERT INTO shop_items (name, cost, description, category, role_id) VALUES (?, ?, ?, ?, ?)", (nazwa, koszt, opis, kategoria, rola.id))
+    conn.commit()
+    conn.close()
+    await interaction.response.send_message(f"✅ Dodano rolę {rola.mention} jako przedmiot `{nazwa}` (automatyczna nagroda) za **{koszt}** reputacji.", ephemeral=True)
 
 @dodaj_przedmiot.autocomplete('kategoria')
 async def dodaj_przedmiot_autocomplete(interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
+    return [app_commands.Choice(name=cat, value=cat) for cat in SHOP_CATEGORIES if current.lower() in cat.lower()]
+
+@dodaj_role_do_sklepu.autocomplete('kategoria')
+async def dodaj_role_autocomplete(interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
     return [app_commands.Choice(name=cat, value=cat) for cat in SHOP_CATEGORIES if current.lower() in cat.lower()]
 
 @bot.tree.command(name="usun_przedmiot", description="Usuwa przedmiot ze sklepu reputacji.")
