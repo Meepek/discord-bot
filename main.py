@@ -26,7 +26,7 @@ COLORS = {
     "main": 0xE67E22,      # Pomarańczowy
     "success": 0x2ECC71,   # Zielony
     "error": 0xE74C3C,     # Czerwony
-    "warn": 0x3498DB,      # Jasnoniebieski (zmieniony z żółtego)
+    "warn": 0x3498DB,      # Jasnoniebieski (dla przypomnień)
 }
 
 # --- KONFIGURACJA FUNKCJI ---
@@ -226,7 +226,15 @@ async def send_notification(guild: discord.Guild, post_type: str, thread_url: st
     role_mention = f"<@&{config['role_id']}>" if config.get('role_id') else ""
     title = f"⏰ Przypomnienie: {post_type}" if is_reminder else f"🔔 Nowe zgłoszenie: {post_type}"
     description = f"Zgłoszenie czeka na reakcję od ponad {REMINDER_CONFIG['delay_days']} dni.\n\n[Przejdź do posta]({thread_url})" if is_reminder else f"Nowy post czeka na Twoją uwagę.\n\n[Przejdź do posta]({thread_url})"
-    embed = discord.Embed(title=title, description=description, color=COLORS["warn"] if is_reminder else COLORS["main"], timestamp=datetime.now(POLAND_TZ))
+    
+    # Dynamiczne kolory powiadomień
+    color = COLORS["main"]
+    if is_reminder:
+        color = COLORS["warn"]
+    elif post_type.startswith("Podanie"):
+        color = COLORS["success"]
+
+    embed = discord.Embed(title=title, description=description, color=color, timestamp=datetime.now(POLAND_TZ))
     if LOGO_URL: embed.set_thumbnail(url=LOGO_URL)
     embed.set_footer(text=FOOTER_TEXT)
     try: await channel.send(content=role_mention, embed=embed)
