@@ -59,7 +59,7 @@ RESPONSE_TEMPLATES = {
 
 # --- BAZA DANYCH ---
 def init_database():
-    conn = sqlite3.connect('bot_database.db')
+    conn = sqlite3.connect('/data/bot_database.db')
     cursor = conn.cursor()
 
     # Tworzymy wszystkie tabele, jeśli nie istnieją.
@@ -132,42 +132,42 @@ def init_database():
 
 # --- FUNKCJE POMOCNICZE BAZY DANYCH ---
 def save_suggestion(user_id, username, category, description, reason, thread_id):
-    conn = sqlite3.connect('bot_database.db')
+    conn = sqlite3.connect('/data/bot_database.db')
     cursor = conn.cursor()
     cursor.execute('INSERT INTO suggestions (user_id, username, category, description, reason, thread_id) VALUES (?, ?, ?, ?, ?, ?)',(user_id, username, category, description, reason, thread_id))
     conn.commit()
     conn.close()
 
 def save_bug_report(user_id, category, bug_type, description, evidence, thread_id):
-    conn = sqlite3.connect('bot_database.db')
+    conn = sqlite3.connect('/data/bot_database.db')
     cursor = conn.cursor()
     cursor.execute('INSERT INTO bug_reports (user_id, category, bug_type, description, evidence, thread_id) VALUES (?, ?, ?, ?, ?, ?)',(user_id, category, bug_type, description, evidence, thread_id))
     conn.commit()
     conn.close()
 
 def save_complaint(user_id, complaint_type, target_user, data, thread_id):
-    conn = sqlite3.connect('bot_database.db')
+    conn = sqlite3.connect('/data/bot_database.db')
     cursor = conn.cursor()
     cursor.execute('INSERT INTO complaints (user_id, complaint_type, target_user, data, thread_id) VALUES (?, ?, ?, ?, ?)',(user_id, complaint_type, target_user, json.dumps(data), thread_id))
     conn.commit()
     conn.close()
 
 def save_appeal(user_id, appeal_type, data, thread_id):
-    conn = sqlite3.connect('bot_database.db')
+    conn = sqlite3.connect('/data/bot_database.db')
     cursor = conn.cursor()
     cursor.execute('INSERT INTO appeals (user_id, appeal_type, data, thread_id) VALUES (?, ?, ?, ?)',(user_id, appeal_type, json.dumps(data), thread_id))
     conn.commit()
     conn.close()
 
 def save_application(user_id, username, app_type, data, thread_id):
-    conn = sqlite3.connect('bot_database.db')
+    conn = sqlite3.connect('/data/bot_database.db')
     cursor = conn.cursor()
     cursor.execute('INSERT INTO applications (user_id, username, application_type, data, thread_id) VALUES (?, ?, ?, ?, ?)',(user_id, username, app_type, json.dumps(data), thread_id))
     conn.commit()
     conn.close()
 
 async def add_reputation(user_id: int, points: int):
-    conn = sqlite3.connect('bot_database.db')
+    conn = sqlite3.connect('/data/bot_database.db')
     cursor = conn.cursor()
     cursor.execute("INSERT OR IGNORE INTO reputation_points (user_id, points) VALUES (?, 0)", (str(user_id),))
     cursor.execute("UPDATE reputation_points SET points = points + ? WHERE user_id = ?", (points, str(user_id)))
@@ -523,7 +523,7 @@ class PollButton(discord.ui.Button):
         message_id = int(self.custom_id.split('_')[1])
         button_index = int(self.custom_id.split('_')[2])
 
-        conn = sqlite3.connect('bot_database.db')
+        conn = sqlite3.connect('/data/bot_database.db')
         cursor = conn.cursor()
         cursor.execute("SELECT votes FROM polls WHERE message_id = ?", (message_id,))
         votes_json = cursor.fetchone()
@@ -603,7 +603,7 @@ async def setup_forum_rekrutacje(interaction: discord.Interaction, kanal_forum: 
 @app_commands.checks.has_permissions(manage_messages=True)
 async def info(interaction: discord.Interaction, uzytkownik: discord.Member):
     await interaction.response.defer(ephemeral=True)
-    conn = sqlite3.connect('bot_database.db')
+    conn = sqlite3.connect('/data/bot_database.db')
     cursor = conn.cursor()
     embed = discord.Embed(title=f"📊 Kartoteka: {uzytkownik.display_name}", color=uzytkownik.color, timestamp=datetime.now(POLAND_TZ))
     embed.set_thumbnail(url=uzytkownik.display_avatar.url)
@@ -621,7 +621,7 @@ async def info(interaction: discord.Interaction, uzytkownik: discord.Member):
 @bot.tree.command(name="moje_zgłoszenia", description="Wyświetla listę Twoich zgłoszeń i ich status.")
 async def moje_zgłoszenia(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral=True)
-    conn = sqlite3.connect('bot_database.db')
+    conn = sqlite3.connect('/data/bot_database.db')
     cursor = conn.cursor()
     embed = discord.Embed(title=f"📝 Twoje zgłoszenia", color=interaction.user.color, timestamp=datetime.now(POLAND_TZ))
     tables_map = {"Propozycje": ("suggestions", "category", "status"), "Błędy": ("bug_reports", "category", "status"), "Skargi": ("complaints", "complaint_type", "status"), "Odwołania": ("appeals", "appeal_type", "status"), "Podania": ("applications", "application_type", "status")}
@@ -659,7 +659,7 @@ async def ankieta(interaction: discord.Interaction, pytanie: str, opcje: str):
     view = PollView(options=options_list, message_id=message.id)
     await message.edit(view=view)
 
-    conn = sqlite3.connect('bot_database.db')
+    conn = sqlite3.connect('/data/bot_database.db')
     cursor = conn.cursor()
     initial_votes = json.dumps({str(i): [] for i in range(len(options_list))})
     cursor.execute("INSERT INTO polls (message_id, question, options, votes, author_id) VALUES (?, ?, ?, ?, ?)",
@@ -679,7 +679,7 @@ async def setup_sklep(interaction: discord.Interaction, kanal: discord.TextChann
 @bot.tree.command(name="dodaj_przedmiot", description="Dodaje nowy przedmiot do sklepu reputacji.")
 @app_commands.checks.has_permissions(administrator=True)
 async def dodaj_przedmiot(interaction: discord.Interaction, nazwa: str, koszt: app_commands.Range[int, 1], opis: str):
-    conn = sqlite3.connect('bot_database.db')
+    conn = sqlite3.connect('/data/bot_database.db')
     cursor = conn.cursor()
     cursor.execute("INSERT INTO shop_items (name, cost, description) VALUES (?, ?, ?)", (nazwa, koszt, opis))
     conn.commit()
@@ -689,7 +689,7 @@ async def dodaj_przedmiot(interaction: discord.Interaction, nazwa: str, koszt: a
 @bot.tree.command(name="usun_przedmiot", description="Usuwa przedmiot ze sklepu reputacji.")
 @app_commands.checks.has_permissions(administrator=True)
 async def usun_przedmiot(interaction: discord.Interaction, id_przedmiotu: int):
-    conn = sqlite3.connect('bot_database.db')
+    conn = sqlite3.connect('/data/bot_database.db')
     cursor = conn.cursor()
     cursor.execute("DELETE FROM shop_items WHERE id = ?", (id_przedmiotu,))
     conn.commit()
@@ -702,7 +702,7 @@ async def usun_przedmiot(interaction: discord.Interaction, id_przedmiotu: int):
 @bot.tree.command(name="sklep", description="Wyświetla przedmioty dostępne w sklepie reputacji.")
 async def sklep(interaction: discord.Interaction):
     await interaction.response.defer()
-    conn = sqlite3.connect('bot_database.db')
+    conn = sqlite3.connect('/data/bot_database.db')
     cursor = conn.cursor()
     cursor.execute("SELECT id, name, cost, description FROM shop_items ORDER BY cost ASC")
     items = cursor.fetchall()
@@ -723,7 +723,7 @@ async def sklep(interaction: discord.Interaction):
 async def kup(interaction: discord.Interaction, id_przedmiotu: int):
     await interaction.response.defer(ephemeral=True)
     
-    conn = sqlite3.connect('bot_database.db')
+    conn = sqlite3.connect('/data/bot_database.db')
     cursor = conn.cursor()
     
     # Pobierz informacje o przedmiocie
@@ -769,7 +769,7 @@ async def kup(interaction: discord.Interaction, id_przedmiotu: int):
 @bot.tree.command(name="ranking", description="Wyświetla ranking użytkowników z największą reputacją.")
 async def ranking(interaction: discord.Interaction):
     await interaction.response.defer()
-    conn = sqlite3.connect('bot_database.db')
+    conn = sqlite3.connect('/data/bot_database.db')
     cursor = conn.cursor()
     cursor.execute("SELECT user_id, points FROM reputation_points ORDER BY points DESC LIMIT 10")
     top_users = cursor.fetchall()
@@ -798,7 +798,7 @@ async def check_for_old_posts():
     if not REMINDER_CONFIG["enabled"]:
         return
 
-    conn = sqlite3.connect('bot_database.db')
+    conn = sqlite3.connect('/data/bot_database.db')
     cursor = conn.cursor()
     
     delay = timedelta(days=REMINDER_CONFIG["delay_days"])
@@ -840,7 +840,7 @@ async def on_ready():
     for post_type in post_types:
         bot.add_view(ManagementView(post_type, author_id=0))
     
-    conn = sqlite3.connect('bot_database.db')
+    conn = sqlite3.connect('/data/bot_database.db')
     cursor = conn.cursor()
     cursor.execute("SELECT message_id, options FROM polls")
     for row in cursor.fetchall():
@@ -858,7 +858,7 @@ async def on_ready():
         print(f"Błąd synchronizacji komend: {e}")
 
 # --- URUCHOMIENIE BOTA ---
-TOKEN = os.getenv('DISCORD_BOT_TOKEN', 'TWÓJ_TOKEN_BOTA_TUTAJ')
+TOKEN = os.getenv('DISCORD_BOT_TOKEN')
 if TOKEN == 'TWÓJ_TOKEN_BOTA_TUTAJ':
     print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
     print("!!! PROSZĘ ZASTĄPIĆ 'TWÓJ_TOKEN_BOTA_TUTAJ' PRAWDZIWYM TOKENEM !!!")
