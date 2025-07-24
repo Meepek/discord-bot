@@ -166,13 +166,20 @@ def save_application(user_id, username, app_type, data, thread_id):
     conn.commit()
     conn.close()
 
-async def add_reputation(user_id: int, points: int):
+async def update_reputation(user_id: int, points: int, mode: str = 'add'):
+    """Zarządza reputacją użytkownika (dodaje, usuwa, ustawia)."""
     conn = sqlite3.connect('/data/bot_database.db')
     cursor = conn.cursor()
     cursor.execute("INSERT OR IGNORE INTO reputation_points (user_id, points) VALUES (?, 0)", (str(user_id),))
-    cursor.execute("UPDATE reputation_points SET points = points + ? WHERE user_id = ?", (points, str(user_id)))
+    if mode == 'add':
+        cursor.execute("UPDATE reputation_points SET points = points + ? WHERE user_id = ?", (points, str(user_id)))
+    elif mode == 'set':
+        cursor.execute("UPDATE reputation_points SET points = ? WHERE user_id = ?", (points, str(user_id)))
     conn.commit()
+    cursor.execute("SELECT points FROM reputation_points WHERE user_id = ?", (str(user_id),))
+    new_balance = cursor.fetchone()[0]
     conn.close()
+    return new_balance
 
 # --- FUNKCJE POMOCNICZE ---
 def has_jb_permissions(user: discord.Member) -> bool:
@@ -329,7 +336,7 @@ async def process_decision(interaction: discord.Interaction, original_interactio
     if reason_text:
         decision_embed.add_field(name="Notatka od administracji", value=reason_text, inline=False)
 
-    if action_details["points"] > 0: await add_reputation(author_id, action_details["points"])
+    if action_details["points"] > 0: await update_reputation(author_id, action_details["points"], mode='add')
 
     dm_message = ""
     if action == "accept_application":
@@ -571,7 +578,7 @@ async def create_shop_embed(category: str):
     else:
         description = ""
         for item in items:
-            description += f"**ID: {item[0]} | {item[1]}** - `{item[2]} pkt.`\n*_{item[3]}_*\n\n"
+            description += f"**ID: {item[0]} | {item[1]}** - `{item[2]} rep.`\n*_{item[3]}_*\n\n"
         embed.description = description
     embed.set_footer(text="Użyj menu poniżej, aby wybrać przedmiot do zakupu.")
     return embed
@@ -616,7 +623,7 @@ class ShopItemSelect(discord.ui.Select):
             self.disabled = True
         else:
             for item_id, name, cost in items:
-                options.append(discord.SelectOption(label=f"{name} ({cost} pkt.)", value=str(item_id)))
+                options.append(discord.SelectOption(label=f"{name} ({cost} rep.)", value=str(item_id)))
         self.options = options
 
     async def callback(self, interaction: discord.Interaction):
@@ -635,7 +642,7 @@ class ShopItemSelect(discord.ui.Select):
         user_points = user_points_row[0] if user_points_row else 0
 
         if user_points < item_cost:
-            await interaction.followup.send(f"❌ Nie masz wystarczającej liczby punktów! Potrzebujesz **{item_cost}**, a masz **{user_points}**.")
+            await interaction.followup.send(f"❌ Nie masz wystarczającej reputacji! Potrzebujesz **{item_cost}**, a masz **{user_points}**.")
             conn.close()
             return
 
@@ -644,7 +651,7 @@ class ShopItemSelect(discord.ui.Select):
         conn.commit()
         conn.close()
 
-        await interaction.followup.send(f"✅ Gratulacje! Kupiłeś **{item_name}** za **{item_cost}** punktów. Twoje saldo: **{new_points}** pkt.\nAdministracja została powiadomiona i wkrótce otrzymasz swoją nagrodę.")
+        await interaction.followup.send(f"✅ Gratulacje! Kupiłeś **{item_name}** za **{item_cost}** reputacji. Twoje saldo: **{new_points}** rep.\nAdministracja została powiadomiona i wkrótce otrzymasz swoją nagrodę.")
 
         if SHOP_CONFIG.get("channel_id") and SHOP_CONFIG.get("role_id"):
             notif_channel = bot.get_channel(SHOP_CONFIG["channel_id"])
@@ -653,9 +660,12 @@ class ShopItemSelect(discord.ui.Select):
                 embed = discord.Embed(title="🛍️ Nowy zakup w sklepie!", color=0x2ecc71, timestamp=datetime.now(POLAND_TZ))
                 embed.add_field(name="Kupujący", value=interaction.user.mention, inline=False)
                 embed.add_field(name="Przedmiot", value=f"{item_name} (ID: {item_id})", inline=False)
-                embed.add_field(name="Koszt", value=f"{item_cost} punktów reputacji", inline=False)
+                embed.add_field(name="Koszt", value=f"{item_cost} reputacji", inline=False)
                 embed.set_footer(text="Proszę o ręczne nadanie nagrody!")
                 await notif_channel.send(content=role_mention, embed=embed)
+
+# --- GRUPA KOMEND SLASH ---
+reputation_group = app_commands.Group(name="reputacja", description="Zarządzanie reputacją użytkowników.")
 
 # --- KOMENDY SLASH ---
 @bot.tree.command(name="setup_logi", description="Konfiguruje kanał logów bota.")
@@ -710,7 +720,7 @@ async def info(interaction: discord.Interaction, uzytkownik: discord.Member):
     embed.set_thumbnail(url=uzytkownik.display_avatar.url)
     cursor.execute("SELECT points FROM reputation_points WHERE user_id = ?", (str(uzytkownik.id),))
     rep = cursor.fetchone()
-    embed.add_field(name="⭐ Punkty Reputacji", value=rep[0] if rep else "0", inline=False)
+    embed.add_field(name="⭐ Reputacja", value=rep[0] if rep else "0", inline=False)
     tables = {"applications": "Podania", "suggestions": "Propozycje", "bug_reports": "Błędy", "complaints": "Skargi", "appeals": "Odwołania"}
     for table, name in tables.items():
         cursor.execute(f"SELECT COUNT(*) FROM {table} WHERE user_id = ?", (str(uzytkownik.id),))
@@ -789,7 +799,7 @@ async def dodaj_przedmiot(interaction: discord.Interaction, kategoria: str, nazw
     cursor.execute("INSERT INTO shop_items (name, cost, description, category) VALUES (?, ?, ?, ?)", (nazwa, koszt, opis, kategoria))
     conn.commit()
     conn.close()
-    await interaction.response.send_message(f"✅ Dodano przedmiot `{nazwa}` do kategorii `{kategoria}` za **{koszt}** punktów reputacji.", ephemeral=True)
+    await interaction.response.send_message(f"✅ Dodano przedmiot `{nazwa}` do kategorii `{kategoria}` za **{koszt}** reputacji.", ephemeral=True)
 
 @dodaj_przedmiot.autocomplete('kategoria')
 async def dodaj_przedmiot_autocomplete(interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
@@ -828,7 +838,7 @@ async def ranking(interaction: discord.Interaction):
     embed = discord.Embed(title="🏆 Ranking Reputacji - Top 10", color=0xf1c40f)
     
     if not top_users:
-        embed.description = "Ranking jest pusty. Bądź pierwszy i zdobądź punkty!"
+        embed.description = "Ranking jest pusty. Bądź pierwszy i zdobądź reputację!"
     else:
         description = ""
         medals = ["🥇", "🥈", "🥉"]
@@ -836,10 +846,31 @@ async def ranking(interaction: discord.Interaction):
             user = interaction.guild.get_member(int(user_id))
             user_name = user.display_name if user else f"Użytkownik (ID: {user_id})"
             medal = medals[i] if i < 3 else f"**{i+1}.**"
-            description += f"{medal} {user_name} - `{points} pkt.`\n"
+            description += f"{medal} {user_name} - `{points} rep.`\n"
         embed.description = description
 
     await interaction.followup.send(embed=embed)
+
+@reputation_group.command(name="dodaj", description="Dodaje reputację użytkownikowi.")
+@app_commands.checks.has_permissions(administrator=True)
+async def reputacja_dodaj(interaction: discord.Interaction, uzytkownik: discord.Member, ilosc: app_commands.Range[int, 1]):
+    new_balance = await update_reputation(uzytkownik.id, ilosc, mode='add')
+    await interaction.response.send_message(f"✅ Dodano **{ilosc}** reputacji dla {uzytkownik.mention}. Nowe saldo: **{new_balance}** rep.", ephemeral=True)
+    await log_action(interaction.guild, "Ręcznie dodano reputację", interaction.user, f"Cel: {uzytkownik.mention}, Ilość: +{ilosc}")
+
+@reputation_group.command(name="usun", description="Usuwa reputację użytkownikowi.")
+@app_commands.checks.has_permissions(administrator=True)
+async def reputacja_usun(interaction: discord.Interaction, uzytkownik: discord.Member, ilosc: app_commands.Range[int, 1]):
+    new_balance = await update_reputation(uzytkownik.id, -ilosc, mode='add')
+    await interaction.response.send_message(f"✅ Usunięto **{ilosc}** reputacji użytkownikowi {uzytkownik.mention}. Nowe saldo: **{new_balance}** rep.", ephemeral=True)
+    await log_action(interaction.guild, "Ręcznie usunięto reputację", interaction.user, f"Cel: {uzytkownik.mention}, Ilość: -{ilosc}")
+
+@reputation_group.command(name="ustaw", description="Ustawia reputację użytkownika na konkretną wartość.")
+@app_commands.checks.has_permissions(administrator=True)
+async def reputacja_ustaw(interaction: discord.Interaction, uzytkownik: discord.Member, ilosc: app_commands.Range[int, 0]):
+    new_balance = await update_reputation(uzytkownik.id, ilosc, mode='set')
+    await interaction.response.send_message(f"✅ Ustawiono reputację {uzytkownik.mention} na **{new_balance}** rep.", ephemeral=True)
+    await log_action(interaction.guild, "Ręcznie ustawiono reputację", interaction.user, f"Cel: {uzytkownik.mention}, Nowa wartość: {ilosc}")
 
 
 # --- ZADANIA W TLE ---
@@ -899,7 +930,8 @@ async def on_ready():
         options = json.loads(options_json)
         bot.add_view(PollView(options, message_id))
     conn.close()
-
+    
+    bot.tree.add_command(reputation_group)
     check_for_old_posts.start()
 
     try:
