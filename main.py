@@ -627,15 +627,20 @@ class ShopItemSelect(discord.ui.Select):
         
         options = []
         if not items:
-            options.append(discord.SelectOption(label="Brak przedmiotów w tej kategorii", value="disabled", default=True))
+            options.append(discord.SelectOption(label="Brak przedmiotów w tej kategorii", value="disabled"))
             self.disabled = True
         else:
             for item_id, name, cost, stock in items:
+                # POPRAWKA: Nie dodajemy wyprzedanych przedmiotów do opcji
+                if stock is not None and stock <= 0:
+                    continue
                 label = f"{name} ({cost} rep.)"
-                is_disabled = stock is not None and stock == 0
-                if is_disabled:
-                    label += " (Wyprzedane)"
-                options.append(discord.SelectOption(label=label, value=str(item_id), disabled=is_disabled))
+                options.append(discord.SelectOption(label=label, value=str(item_id)))
+        
+        if not options:
+            options.append(discord.SelectOption(label="Brak dostępnych przedmiotów", value="disabled"))
+            self.disabled = True
+
         self.options = options
 
     async def callback(self, interaction: discord.Interaction):
