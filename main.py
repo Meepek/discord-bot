@@ -40,6 +40,7 @@ SHOP_CONFIG = {
     "manual_reward_roles": ["Opiekun JB", "Zarząd", "Właściciel"] 
 }
 SHOP_CATEGORIES = ["Specjalne role", "VIP", "Premium", "Fajki", "Oferty Dnia", "Inne"]
+RECRUITMENT_TYPES = ["Podanie Admin JB", "Podanie Zaufany JB", "Podanie Admin DC"]
 
 # --- SZABLONY ODPOWIEDZI ---
 RESPONSE_TEMPLATES = {
@@ -123,12 +124,17 @@ def init_database():
             role_id INTEGER DEFAULT NULL,
             stock INTEGER DEFAULT NULL 
         )''')
-    # NOWA TABELA: Historia zakupów ról
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS shop_purchases (
             user_id INTEGER NOT NULL,
             item_id INTEGER NOT NULL,
             PRIMARY KEY (user_id, item_id)
+        )''')
+    # NOWA TABELA: Status rekrutacji
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS recruitment_status (
+            position TEXT PRIMARY KEY,
+            is_open INTEGER DEFAULT 1
         )''')
     
     tables_to_alter = {
@@ -457,11 +463,36 @@ class ForumSelect(discord.ui.Select):
         elif view_type == "complaints_appeals":
             placeholder, options = "Wybierz akcję (skargi i odwołania)...", [discord.SelectOption(label="Skarga JB", emoji="⚠️", value="Skarga JB"), discord.SelectOption(label="Skarga DC", emoji="⚠️", value="Skarga DC"), discord.SelectOption(label="Odwołanie JB", emoji="🔓", value="Odwołanie JB"), discord.SelectOption(label="Odwołanie DC", emoji="🔓", value="Odwołanie DC")]
         elif view_type == "recruitment":
-            placeholder, options = "Wybierz stanowisko, na które aplikujesz...", [discord.SelectOption(label="Podanie Admin JB", emoji="🛡️", value="Podanie Admin JB"), discord.SelectOption(label="Podanie Zaufany JB", emoji="🤝", value="Podanie Zaufany JB"), discord.SelectOption(label="Podanie Admin DC", emoji="💬", value="Podanie Admin DC")]
+            placeholder = "Wybierz stanowisko, na które aplikujesz..."
+            conn = sqlite3.connect('/data/bot_database.db')
+            cursor = conn.cursor()
+            options = []
+            for position in RECRUITMENT_TYPES:
+                cursor.execute("SELECT is_open FROM recruitment_status WHERE position = ?", (position,))
+                status = cursor.fetchone()
+                is_open = status[0] if status else 1  # Domyślnie otwarte
+                label = position
+                if not is_open:
+                    label += " (Zamknięta)"
+                options.append(discord.SelectOption(label=label, value=position, emoji="📄"))
+            conn.close()
+
         super().__init__(placeholder=placeholder, min_values=1, max_values=1, options=options, custom_id=custom_id)
 
     async def callback(self, interaction: discord.Interaction):
         choice = self.values[0]
+
+        conn = sqlite3.connect('/data/bot_database.db')
+        cursor = conn.cursor()
+        cursor.execute("SELECT is_open FROM recruitment_status WHERE position = ?", (choice,))
+        status = cursor.fetchone()
+        conn.close()
+        is_open = status[0] if status else 1
+
+        if not is_open:
+            await interaction.response.send_message("❌ Rekrutacja na to stanowisko jest obecnie zamknięta.", ephemeral=True)
+            return
+
         modal_map = {"Propozycja JB": SuggestionModal, "Propozycja DC": SuggestionModal, "Błąd JB": BugReportModal, "Błąd DC": BugReportModal, "Skarga JB": ComplaintModal, "Skarga DC": ComplaintModal, "Odwołanie JB": AppealModal, "Odwołanie DC": AppealModal}
         if choice in modal_map: await interaction.response.send_modal(modal_map[choice](choice)); return
         if choice.startswith("Podanie"):
@@ -697,7 +728,6 @@ class ShopItemSelect(discord.ui.Select):
             conn.close()
             return
             
-        # Sprawdzenie czy użytkownik już kupił ten przedmiot (tylko dla Specjalnych ról)
         if category == "Specjalne role":
             cursor.execute("SELECT 1 FROM shop_purchases WHERE user_id = ? AND item_id = ?", (interaction.user.id, item_id))
             if cursor.fetchone():
@@ -760,6 +790,7 @@ class ShopItemSelect(discord.ui.Select):
 
 # --- GRUPA KOMEND SLASH ---
 reputation_group = app_commands.Group(name="reputacja", description="Zarządzanie reputacją użytkowników.")
+recruitment_group = app_commands.Group(name="rekrutacja", description="Zarządzanie statusami rekrutacji.")
 
 # --- KOMENDY SLASH ---
 @bot.tree.command(name="setup_logi", description="Konfiguruje kanał logów bota.")
@@ -988,6 +1019,37 @@ async def reputacja_ustaw(interaction: discord.Interaction, uzytkownik: discord.
     await interaction.response.send_message(f"✅ Ustawiono reputację {uzytkownik.mention} na **{new_balance}** rep.", ephemeral=True)
     await log_action(interaction.guild, "Ręcznie ustawiono reputację", interaction.user, f"Cel: {uzytkownik.mention}, Nowa wartość: {ilosc}")
 
+@recruitment_group.command(name="otworz", description="Otwiera rekrutację na dane stanowisko.")
+@app_commands.checks.has_permissions(administrator=True)
+async def rekrutacja_otworz(interaction: discord.Interaction, stanowisko: str):
+    if stanowisko not in RECRUITMENT_TYPES:
+        await interaction.response.send_message(f"❌ Nieprawidłowe stanowisko. Dostępne: {', '.join(RECRUITMENT_TYPES)}", ephemeral=True)
+        return
+    conn = sqlite3.connect('/data/bot_database.db')
+    cursor = conn.cursor()
+    cursor.execute("INSERT OR REPLACE INTO recruitment_status (position, is_open) VALUES (?, 1)", (stanowisko,))
+    conn.commit()
+    conn.close()
+    await interaction.response.send_message(f"✅ Rekrutacja na stanowisko **{stanowisko}** została **otwarta**.\n> Pamiętaj, aby odświeżyć panel komendą `/setup_forum_rekrutacje`!", ephemeral=True)
+
+@recruitment_group.command(name="zamknij", description="Zamyka rekrutację na dane stanowisko.")
+@app_commands.checks.has_permissions(administrator=True)
+async def rekrutacja_zamknij(interaction: discord.Interaction, stanowisko: str):
+    if stanowisko not in RECRUITMENT_TYPES:
+        await interaction.response.send_message(f"❌ Nieprawidłowe stanowisko. Dostępne: {', '.join(RECRUITMENT_TYPES)}", ephemeral=True)
+        return
+    conn = sqlite3.connect('/data/bot_database.db')
+    cursor = conn.cursor()
+    cursor.execute("INSERT OR REPLACE INTO recruitment_status (position, is_open) VALUES (?, 0)", (stanowisko,))
+    conn.commit()
+    conn.close()
+    await interaction.response.send_message(f"✅ Rekrutacja na stanowisko **{stanowisko}** została **zamknięta**.\n> Pamiętaj, aby odświeżyć panel komendą `/setup_forum_rekrutacje`!", ephemeral=True)
+
+@rekrutacja_otworz.autocomplete('stanowisko')
+@rekrutacja_zamknij.autocomplete('stanowisko')
+async def rekrutacja_autocomplete(interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
+    return [app_commands.Choice(name=pos, value=pos) for pos in RECRUITMENT_TYPES if current.lower() in pos.lower()]
+
 
 # --- ZADANIA W TLE ---
 @tasks.loop(hours=1)
@@ -1048,6 +1110,7 @@ async def on_ready():
     conn.close()
     
     bot.tree.add_command(reputation_group)
+    bot.tree.add_command(recruitment_group)
     check_for_old_posts.start()
 
     try:
