@@ -41,7 +41,16 @@ SHOP_CONFIG = {
 }
 SHOP_CATEGORIES = ["Specjalne role", "VIP", "Premium", "Fajki", "Oferty Dnia", "Inne"]
 RECRUITMENT_TYPES = ["Podanie Admin JB", "Podanie Zaufany JB", "Podanie Admin DC"]
-RECRUITMENT_ADMIN_ROLES = ["Opiekun JB", "Zarząd", "Właściciel"] # Role uprawnione do /rekrutacja
+
+# --- ZARZĄDZANIE UPRAWNIENIAMI ---
+# Wpisz tutaj DOKŁADNE nazwy ról, które mają mieć dostęp do poszczególnych grup komend.
+# Użytkownicy z uprawnieniem "Administrator" zawsze mają dostęp.
+SETUP_ADMIN_ROLES = ["Właściciel", "Zarząd"]
+SHOP_ADMIN_ROLES = ["Właściciel", "Zarząd"]
+REPUTATION_ADMIN_ROLES = ["Właściciel", "Zarząd"]
+RECRUITMENT_ADMIN_ROLES = ["Opiekun JB", "Opiekun Discord", "Zarząd", "Właściciel"]
+GENERAL_ADMIN_ROLES = ["Właściciel", "Zarząd", "Opiekun JB", "Opiekun Discord"] # Dla /ankieta itp.
+
 
 # --- SZABLONY ODPOWIEDZI ---
 RESPONSE_TEMPLATES = {
@@ -131,7 +140,6 @@ def init_database():
             item_id INTEGER NOT NULL,
             PRIMARY KEY (user_id, item_id)
         )''')
-    # NOWA TABELA: Status rekrutacji
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS recruitment_status (
             position TEXT PRIMARY KEY,
@@ -208,6 +216,12 @@ async def update_reputation(user_id: int, points: int, mode: str = 'add'):
     return new_balance
 
 # --- FUNKCJE POMOCNICZE ---
+def is_authorized(interaction: discord.Interaction, required_roles: list) -> bool:
+    """Sprawdza, czy użytkownik ma wymaganą rolę lub jest administratorem."""
+    if interaction.user.guild_permissions.administrator:
+        return True
+    return any(role.name in required_roles for role in interaction.user.roles)
+
 def has_jb_permissions(user: discord.Member) -> bool:
     return any(role.name == "Opiekun JB" for role in user.roles) or user.guild_permissions.administrator
 
@@ -791,33 +805,41 @@ class ShopItemSelect(discord.ui.Select):
 
 # --- GRUPA KOMEND SLASH ---
 reputation_group = app_commands.Group(name="reputacja", description="Zarządzanie reputacją użytkowników.")
-recruitment_group = app_commands.Group(name="rekrutacja", description="Zarządzanie statusami rekrutacji.", default_permissions=discord.Permissions(administrator=True))
+recruitment_group = app_commands.Group(name="rekrutacja", description="Zarządzanie statusami rekrutacji.")
 
 # --- KOMENDY SLASH ---
 @bot.tree.command(name="setup_logi", description="Konfiguruje kanał logów bota.")
-@app_commands.checks.has_permissions(administrator=True)
 async def setup_logi(interaction: discord.Interaction, kanal: discord.TextChannel):
+    if not is_authorized(interaction, SETUP_ADMIN_ROLES):
+        await interaction.response.send_message("❌ Nie masz uprawnień do użycia tej komendy.", ephemeral=True)
+        return
     global LOG_CHANNEL_ID
     LOG_CHANNEL_ID = kanal.id
     await interaction.response.send_message(f"✅ Kanał logów został ustawiony na {kanal.mention}.", ephemeral=True)
 
 @bot.tree.command(name="setup_powiadomienia", description="Konfiguruje powiadomienia dla opiekunów.")
-@app_commands.checks.has_permissions(administrator=True)
 async def setup_powiadomienia(interaction: discord.Interaction, typ_zgloszenia: str, kanal: discord.TextChannel, rola: Optional[discord.Role] = None):
+    if not is_authorized(interaction, SETUP_ADMIN_ROLES):
+        await interaction.response.send_message("❌ Nie masz uprawnień do użycia tej komendy.", ephemeral=True)
+        return
     NOTIFICATION_CONFIG[typ_zgloszenia] = {'channel_id': kanal.id, 'role_id': rola.id if rola else None}
     await interaction.response.send_message(f"✅ Ustawiono powiadomienia dla `{typ_zgloszenia}` na kanale {kanal.mention}" + (f" z rolą {rola.mention}." if rola else "."), ephemeral=True)
 
 @bot.tree.command(name="setup_przypomnienia", description="Włącza lub wyłącza automatyczne przypomnienia o starych postach.")
-@app_commands.checks.has_permissions(administrator=True)
 async def setup_przypomnienia(interaction: discord.Interaction, wlaczone: bool, dni: app_commands.Range[int, 1, 30] = 3):
+    if not is_authorized(interaction, SETUP_ADMIN_ROLES):
+        await interaction.response.send_message("❌ Nie masz uprawnień do użycia tej komendy.", ephemeral=True)
+        return
     REMINDER_CONFIG["enabled"] = wlaczone
     REMINDER_CONFIG["delay_days"] = dni
     status = "włączone" if wlaczone else "wyłączone"
     await interaction.response.send_message(f"✅ Automatyczne przypomnienia zostały **{status}**. Czas oczekiwania: **{dni} dni**.", ephemeral=True)
 
 @bot.tree.command(name="setup_forum_propozycje", description="Tworzy panel zgłaszania propozycji i błędów.")
-@app_commands.checks.has_permissions(administrator=True)
 async def setup_forum_propozycje(interaction: discord.Interaction, kanal_forum: discord.ForumChannel):
+    if not is_authorized(interaction, SETUP_ADMIN_ROLES):
+        await interaction.response.send_message("❌ Nie masz uprawnień do użycia tej komendy.", ephemeral=True)
+        return
     embed = discord.Embed(title="💡 Propozycje i Błędy 🐛", description="Masz pomysł na ulepszenie serwera lub znalazłeś błąd? Użyj menu poniżej!", color=COLORS["main"])
     if LOGO_URL: embed.set_thumbnail(url=LOGO_URL)
     embed.set_footer(text=FOOTER_TEXT)
@@ -825,8 +847,10 @@ async def setup_forum_propozycje(interaction: discord.Interaction, kanal_forum: 
     await interaction.response.send_message(f"✅ Panel utworzony na {kanal_forum.mention}!", ephemeral=True)
 
 @bot.tree.command(name="setup_forum_skargi", description="Tworzy panel składania skarg i odwołań.")
-@app_commands.checks.has_permissions(administrator=True)
 async def setup_forum_skargi(interaction: discord.Interaction, kanal_forum: discord.ForumChannel):
+    if not is_authorized(interaction, SETUP_ADMIN_ROLES):
+        await interaction.response.send_message("❌ Nie masz uprawnień do użycia tej komendy.", ephemeral=True)
+        return
     embed = discord.Embed(title="⚠️ Skargi i Odwołania 🔓", description="Chcesz złożyć skargę lub odwołać się od kary? Użyj menu poniżej.", color=COLORS["main"])
     if LOGO_URL: embed.set_thumbnail(url=LOGO_URL)
     embed.set_footer(text=FOOTER_TEXT)
@@ -834,8 +858,10 @@ async def setup_forum_skargi(interaction: discord.Interaction, kanal_forum: disc
     await interaction.response.send_message(f"✅ Panel utworzony na {kanal_forum.mention}!", ephemeral=True)
 
 @bot.tree.command(name="setup_forum_rekrutacje", description="Tworzy panel rekrutacyjny na kanale forum.")
-@app_commands.checks.has_permissions(administrator=True)
 async def setup_forum_rekrutacje(interaction: discord.Interaction, kanal_forum: discord.ForumChannel):
+    if not is_authorized(interaction, SETUP_ADMIN_ROLES):
+        await interaction.response.send_message("❌ Nie masz uprawnień do użycia tej komendy.", ephemeral=True)
+        return
     embed = discord.Embed(title="📝 Centrum Rekrutacji", description="Chcesz dołączyć do ekipy? Wybierz stanowisko z menu poniżej.", color=COLORS["main"])
     if LOGO_URL: embed.set_thumbnail(url=LOGO_URL)
     embed.set_footer(text=FOOTER_TEXT)
@@ -843,7 +869,6 @@ async def setup_forum_rekrutacje(interaction: discord.Interaction, kanal_forum: 
     await interaction.response.send_message(f"✅ Panel rekrutacyjny utworzony na {kanal_forum.mention}!", ephemeral=True)
 
 @bot.tree.command(name="info", description="Wyświetla informacje o aktywności użytkownika.")
-@app_commands.checks.has_permissions(manage_messages=True)
 async def info(interaction: discord.Interaction, uzytkownik: discord.Member):
     await interaction.response.defer(ephemeral=True)
     conn = sqlite3.connect('/data/bot_database.db')
@@ -886,9 +911,10 @@ async def moje_zgłoszenia(interaction: discord.Interaction):
     await interaction.followup.send(embed=embed)
 
 @bot.tree.command(name="ankieta", description="Tworzy ankietę z przyciskami.")
-@app_commands.checks.has_permissions(manage_messages=True)
-@app_commands.describe(pytanie="Pytanie ankiety.", opcje="Opcje odpowiedzi, oddzielone średnikiem (;). Maks. 5 opcji.")
 async def ankieta(interaction: discord.Interaction, pytanie: str, opcje: str):
+    if not is_authorized(interaction, GENERAL_ADMIN_ROLES):
+        await interaction.response.send_message("❌ Nie masz uprawnień do użycia tej komendy.", ephemeral=True)
+        return
     options_list = [opt.strip() for opt in opcje.split(';') if opt.strip()][:5]
     if len(options_list) < 2:
         await interaction.response.send_message("❌ Ankieta musi mieć co najmniej 2 opcje.", ephemeral=True)
@@ -917,15 +943,19 @@ async def ankieta(interaction: discord.Interaction, pytanie: str, opcje: str):
 
 # --- NOWE KOMENDY SKLEPU ---
 @bot.tree.command(name="setup_powiadomienia_sklep", description="Konfiguruje kanał powiadomień o zakupach w sklepie.")
-@app_commands.checks.has_permissions(administrator=True)
 async def setup_powiadomienia_sklep(interaction: discord.Interaction, kanal: discord.TextChannel):
+    if not is_authorized(interaction, SETUP_ADMIN_ROLES):
+        await interaction.response.send_message("❌ Nie masz uprawnień do użycia tej komendy.", ephemeral=True)
+        return
     SHOP_CONFIG["channel_id"] = kanal.id
     await interaction.response.send_message(f"✅ Skonfigurowano kanał powiadomień o zakupach na {kanal.mention}.", ephemeral=True)
 
 @bot.tree.command(name="dodaj_przedmiot", description="Dodaje przedmiot do sklepu (wymaga ręcznego nadania).")
-@app_commands.checks.has_permissions(administrator=True)
 @app_commands.describe(kategoria="Kategoria przedmiotu", nazwa="Nazwa przedmiotu", koszt="Cena w reputacji", opis="Opis przedmiotu")
 async def dodaj_przedmiot(interaction: discord.Interaction, kategoria: str, nazwa: str, koszt: app_commands.Range[int, 1], opis: str):
+    if not is_authorized(interaction, SHOP_ADMIN_ROLES):
+        await interaction.response.send_message("❌ Nie masz uprawnień do użycia tej komendy.", ephemeral=True)
+        return
     if kategoria not in SHOP_CATEGORIES:
         await interaction.response.send_message(f"❌ Nieprawidłowa kategoria. Dostępne kategorie: {', '.join(SHOP_CATEGORIES)}", ephemeral=True)
         return
@@ -937,9 +967,11 @@ async def dodaj_przedmiot(interaction: discord.Interaction, kategoria: str, nazw
     await interaction.response.send_message(f"✅ Dodano przedmiot `{nazwa}` (ręczna nagroda) do kategorii `{kategoria}` za **{koszt}** reputacji.", ephemeral=True)
 
 @bot.tree.command(name="dodaj_specjalna_role", description="Dodaje limitowaną rolę do sklepu (nadawana automatycznie).")
-@app_commands.checks.has_permissions(administrator=True)
 @app_commands.describe(nazwa="Nazwa przedmiotu", koszt="Cena w reputacji", rola="Rola do nadania", ilosc="Liczba dostępnych sztuk", opis="Opis przedmiotu")
 async def dodaj_specjalna_role(interaction: discord.Interaction, nazwa: str, koszt: app_commands.Range[int, 1], rola: discord.Role, ilosc: app_commands.Range[int, 1], opis: str):
+    if not is_authorized(interaction, SHOP_ADMIN_ROLES):
+        await interaction.response.send_message("❌ Nie masz uprawnień do użycia tej komendy.", ephemeral=True)
+        return
     conn = sqlite3.connect('/data/bot_database.db')
     cursor = conn.cursor()
     cursor.execute("INSERT INTO shop_items (name, cost, description, category, role_id, stock) VALUES (?, ?, ?, ?, ?, ?)", (nazwa, koszt, opis, "Specjalne role", rola.id, ilosc))
@@ -952,8 +984,10 @@ async def dodaj_przedmiot_autocomplete(interaction: discord.Interaction, current
     return [app_commands.Choice(name=cat, value=cat) for cat in SHOP_CATEGORIES if current.lower() in cat.lower() and cat != "Specjalne role"]
 
 @bot.tree.command(name="usun_przedmiot", description="Usuwa przedmiot ze sklepu reputacji.")
-@app_commands.checks.has_permissions(administrator=True)
 async def usun_przedmiot(interaction: discord.Interaction, id_przedmiotu: int):
+    if not is_authorized(interaction, SHOP_ADMIN_ROLES):
+        await interaction.response.send_message("❌ Nie masz uprawnień do użycia tej komendy.", ephemeral=True)
+        return
     conn = sqlite3.connect('/data/bot_database.db')
     cursor = conn.cursor()
     cursor.execute("DELETE FROM shop_items WHERE id = ?", (id_przedmiotu,))
@@ -965,8 +999,10 @@ async def usun_przedmiot(interaction: discord.Interaction, id_przedmiotu: int):
     conn.close()
 
 @bot.tree.command(name="setup_sklep_panel", description="Tworzy interaktywny panel sklepu na kanale.")
-@app_commands.checks.has_permissions(administrator=True)
 async def setup_sklep_panel(interaction: discord.Interaction, kanal: discord.TextChannel):
+    if not is_authorized(interaction, SETUP_ADMIN_ROLES):
+        await interaction.response.send_message("❌ Nie masz uprawnień do użycia tej komendy.", ephemeral=True)
+        return
     embed = await create_shop_embed(SHOP_CATEGORIES[0]) # Wyświetl pierwszą kategorię domyślnie
     view = ShopView(initial_category=SHOP_CATEGORIES[0])
     await kanal.send(embed=embed, view=view)
@@ -1000,30 +1036,35 @@ async def ranking(interaction: discord.Interaction):
     await interaction.followup.send(embed=embed)
 
 @reputation_group.command(name="dodaj", description="Dodaje reputację użytkownikowi.")
-@app_commands.checks.has_permissions(administrator=True)
 async def reputacja_dodaj(interaction: discord.Interaction, uzytkownik: discord.Member, ilosc: app_commands.Range[int, 1]):
+    if not is_authorized(interaction, REPUTATION_ADMIN_ROLES):
+        await interaction.response.send_message("❌ Nie masz uprawnień do użycia tej komendy.", ephemeral=True)
+        return
     new_balance = await update_reputation(uzytkownik.id, ilosc, mode='add')
     await interaction.response.send_message(f"✅ Dodano **{ilosc}** reputacji dla {uzytkownik.mention}. Nowe saldo: **{new_balance}** rep.", ephemeral=True)
     await log_action(interaction.guild, "Ręcznie dodano reputację", interaction.user, f"Cel: {uzytkownik.mention}, Ilość: +{ilosc}")
 
 @reputation_group.command(name="usun", description="Usuwa reputację użytkownikowi.")
-@app_commands.checks.has_permissions(administrator=True)
 async def reputacja_usun(interaction: discord.Interaction, uzytkownik: discord.Member, ilosc: app_commands.Range[int, 1]):
+    if not is_authorized(interaction, REPUTATION_ADMIN_ROLES):
+        await interaction.response.send_message("❌ Nie masz uprawnień do użycia tej komendy.", ephemeral=True)
+        return
     new_balance = await update_reputation(uzytkownik.id, -ilosc, mode='add')
     await interaction.response.send_message(f"✅ Usunięto **{ilosc}** reputacji użytkownikowi {uzytkownik.mention}. Nowe saldo: **{new_balance}** rep.", ephemeral=True)
     await log_action(interaction.guild, "Ręcznie usunięto reputację", interaction.user, f"Cel: {uzytkownik.mention}, Ilość: -{ilosc}")
 
 @reputation_group.command(name="ustaw", description="Ustawia reputację użytkownika na konkretną wartość.")
-@app_commands.checks.has_permissions(administrator=True)
 async def reputacja_ustaw(interaction: discord.Interaction, uzytkownik: discord.Member, ilosc: app_commands.Range[int, 0]):
+    if not is_authorized(interaction, REPUTATION_ADMIN_ROLES):
+        await interaction.response.send_message("❌ Nie masz uprawnień do użycia tej komendy.", ephemeral=True)
+        return
     new_balance = await update_reputation(uzytkownik.id, ilosc, mode='set')
     await interaction.response.send_message(f"✅ Ustawiono reputację {uzytkownik.mention} na **{new_balance}** rep.", ephemeral=True)
     await log_action(interaction.guild, "Ręcznie ustawiono reputację", interaction.user, f"Cel: {uzytkownik.mention}, Nowa wartość: {ilosc}")
 
 @recruitment_group.command(name="otworz", description="Otwiera rekrutację na dane stanowisko.")
 async def rekrutacja_otworz(interaction: discord.Interaction, stanowisko: str):
-    # Sprawdzanie uprawnień wewnątrz komendy
-    if not any(role.name in RECRUITMENT_ADMIN_ROLES for role in interaction.user.roles) and not interaction.user.guild_permissions.administrator:
+    if not is_authorized(interaction, RECRUITMENT_ADMIN_ROLES):
         await interaction.response.send_message("❌ Nie masz uprawnień do użycia tej komendy.", ephemeral=True)
         return
         
@@ -1039,8 +1080,7 @@ async def rekrutacja_otworz(interaction: discord.Interaction, stanowisko: str):
 
 @recruitment_group.command(name="zamknij", description="Zamyka rekrutację na dane stanowisko.")
 async def rekrutacja_zamknij(interaction: discord.Interaction, stanowisko: str):
-    # Sprawdzanie uprawnień wewnątrz komendy
-    if not any(role.name in RECRUITMENT_ADMIN_ROLES for role in interaction.user.roles) and not interaction.user.guild_permissions.administrator:
+    if not is_authorized(interaction, RECRUITMENT_ADMIN_ROLES):
         await interaction.response.send_message("❌ Nie masz uprawnień do użycia tej komendy.", ephemeral=True)
         return
 
