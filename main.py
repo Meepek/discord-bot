@@ -790,7 +790,7 @@ class ShopItemSelect(discord.ui.Select):
 
 # --- GRUPA KOMEND SLASH ---
 reputation_group = app_commands.Group(name="reputacja", description="Zarządzanie reputacją użytkowników.")
-recruitment_group = app_commands.Group(name="rekrutacja", description="Zarządzanie statusami rekrutacji.")
+recruitment_group = app_commands.Group(name="rekrutacja", description="Zarządzanie statusami rekrutacji.", default_permissions=discord.Permissions(administrator=True))
 
 # --- KOMENDY SLASH ---
 @bot.tree.command(name="setup_logi", description="Konfiguruje kanał logów bota.")
