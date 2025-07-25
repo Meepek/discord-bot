@@ -1020,7 +1020,6 @@ async def reputacja_ustaw(interaction: discord.Interaction, uzytkownik: discord.
     await log_action(interaction.guild, "Ręcznie ustawiono reputację", interaction.user, f"Cel: {uzytkownik.mention}, Nowa wartość: {ilosc}")
 
 @recruitment_group.command(name="otworz", description="Otwiera rekrutację na dane stanowisko.")
-@app_commands.checks.has_permissions(administrator=True)
 async def rekrutacja_otworz(interaction: discord.Interaction, stanowisko: str):
     if stanowisko not in RECRUITMENT_TYPES:
         await interaction.response.send_message(f"❌ Nieprawidłowe stanowisko. Dostępne: {', '.join(RECRUITMENT_TYPES)}", ephemeral=True)
@@ -1033,7 +1032,6 @@ async def rekrutacja_otworz(interaction: discord.Interaction, stanowisko: str):
     await interaction.response.send_message(f"✅ Rekrutacja na stanowisko **{stanowisko}** została **otwarta**.\n> Pamiętaj, aby odświeżyć panel komendą `/setup_forum_rekrutacje`!", ephemeral=True)
 
 @recruitment_group.command(name="zamknij", description="Zamyka rekrutację na dane stanowisko.")
-@app_commands.checks.has_permissions(administrator=True)
 async def rekrutacja_zamknij(interaction: discord.Interaction, stanowisko: str):
     if stanowisko not in RECRUITMENT_TYPES:
         await interaction.response.send_message(f"❌ Nieprawidłowe stanowisko. Dostępne: {', '.join(RECRUITMENT_TYPES)}", ephemeral=True)
