@@ -123,6 +123,13 @@ def init_database():
             role_id INTEGER DEFAULT NULL,
             stock INTEGER DEFAULT NULL 
         )''')
+    # NOWA TABELA: Historia zakupów ról
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS shop_purchases (
+            user_id INTEGER NOT NULL,
+            item_id INTEGER NOT NULL,
+            PRIMARY KEY (user_id, item_id)
+        )''')
     
     tables_to_alter = {
         "suggestions": "reminder_sent INTEGER DEFAULT 0",
@@ -227,7 +234,6 @@ async def send_notification(guild: discord.Guild, post_type: str, thread_url: st
     title = f"⏰ Przypomnienie: {post_type}" if is_reminder else f"🔔 Nowe zgłoszenie: {post_type}"
     description = f"Zgłoszenie czeka na reakcję od ponad {REMINDER_CONFIG['delay_days']} dni.\n\n[Przejdź do posta]({thread_url})" if is_reminder else f"Nowy post czeka na Twoją uwagę.\n\n[Przejdź do posta]({thread_url})"
     
-    # Dynamiczne kolory powiadomień
     color = COLORS["main"]
     if is_reminder:
         color = COLORS["warn"]
@@ -256,7 +262,7 @@ class BugReportModal(discord.ui.Modal):
         super().__init__(title=f"Nowy {bug_type}")
         self.description = discord.ui.TextInput(label="Opis błędu", style=discord.TextStyle.paragraph, required=True, max_length=1024)
         self.add_item(self.description)
-        self.evidence = discord.ui.TextInput(label="Dowody (linki do screenów, filmów)", required=False, max_length=500)
+        self.evidence = discord.ui.TextInput(label="Dowody (linki do screenów, filmów)", required=False, max_length=1024)
         self.add_item(self.evidence)
     async def on_submit(self, interaction: discord.Interaction):
         await create_generic_post(self, interaction, self.title.replace("Nowy ", ""), "🐛")
@@ -266,9 +272,9 @@ class ComplaintModal(discord.ui.Modal):
         super().__init__(title=f"Nowa {complaint_type}")
         self.target_nick = discord.ui.TextInput(label="Nick osoby, na którą składasz skargę", required=True)
         self.add_item(self.target_nick)
-        self.reason = discord.ui.TextInput(label="Opis sytuacji i powód skargi", style=discord.TextStyle.paragraph, required=True)
+        self.reason = discord.ui.TextInput(label="Opis sytuacji i powód skargi", style=discord.TextStyle.paragraph, required=True, max_length=1024)
         self.add_item(self.reason)
-        self.evidence = discord.ui.TextInput(label="Dowody (linki do screenów, filmów)", required=True)
+        self.evidence = discord.ui.TextInput(label="Dowody (linki do screenów, filmów)", required=True, max_length=1024)
         self.add_item(self.evidence)
     async def on_submit(self, interaction: discord.Interaction):
         await create_generic_post(self, interaction, self.title.replace("Nowa ", ""), "⚠️")
@@ -276,11 +282,11 @@ class ComplaintModal(discord.ui.Modal):
 class AppealModal(discord.ui.Modal):
     def __init__(self, appeal_type: str):
         super().__init__(title=f"Nowe {appeal_type}")
-        self.ban_reason = discord.ui.TextInput(label="Powód otrzymanej kary", required=True)
+        self.ban_reason = discord.ui.TextInput(label="Powód otrzymanej kary", required=True, max_length=1024)
         self.add_item(self.ban_reason)
         self.admin_nick = discord.ui.TextInput(label="Nick admina, który nałożył karę", required=True)
         self.add_item(self.admin_nick)
-        self.appeal_reason = discord.ui.TextInput(label="Dlaczego chcesz otrzymać unbana?", style=discord.TextStyle.paragraph, required=True)
+        self.appeal_reason = discord.ui.TextInput(label="Dlaczego chcesz otrzymać unbana?", style=discord.TextStyle.paragraph, required=True, max_length=1024)
         self.add_item(self.appeal_reason)
     async def on_submit(self, interaction: discord.Interaction):
         await create_generic_post(self, interaction, self.title.replace("Nowe ", ""), "🔓")
@@ -290,7 +296,7 @@ class AdminApplicationModal(discord.ui.Modal, title="Podanie Admin JB"):
     age = discord.ui.TextInput(label="Wiek", required=True, max_length=3)
     tsarvar = discord.ui.TextInput(label="Link do TSARVAR i profilu Steam", required=True)
     steam_id = discord.ui.TextInput(label="SteamID64", required=True)
-    about = discord.ui.TextInput(label="Napisz coś o sobie i swoim doświadczeniu", style=discord.TextStyle.paragraph, required=True)
+    about = discord.ui.TextInput(label="Napisz coś o sobie i swoim doświadczeniu", style=discord.TextStyle.paragraph, required=True, max_length=1024)
     async def on_submit(self, interaction: discord.Interaction):
         await create_generic_post(self, interaction, "Podanie Admin JB", "📄")
 
@@ -299,16 +305,16 @@ class TrustedApplicationModal(discord.ui.Modal, title="Podanie Zaufany JB"):
     age = discord.ui.TextInput(label="Wiek", required=True, max_length=3)
     tsarvar = discord.ui.TextInput(label="Link do TSARVAR i profilu Steam", required=True)
     steam_id = discord.ui.TextInput(label="SteamID64", required=True)
-    about = discord.ui.TextInput(label="Napisz coś o sobie", style=discord.TextStyle.paragraph, required=True)
+    about = discord.ui.TextInput(label="Napisz coś o sobie", style=discord.TextStyle.paragraph, required=True, max_length=1024)
     async def on_submit(self, interaction: discord.Interaction):
         await create_generic_post(self, interaction, "Podanie Zaufany JB", "📄")
 
 class DiscordAdminApplicationModal(discord.ui.Modal, title="Podanie Admin DC"):
     server_time = discord.ui.TextInput(label="Od kiedy jesteś na tym serwerze Discord?", required=True)
-    experience = discord.ui.TextInput(label="Doświadczenie jako administrator", style=discord.TextStyle.paragraph, required=True)
+    experience = discord.ui.TextInput(label="Doświadczenie jako administrator", style=discord.TextStyle.paragraph, required=True, max_length=1024)
     knowledge = discord.ui.TextInput(label="Znajomość Discorda (od 1 do 10)", required=True, max_length=2)
     availability = discord.ui.TextInput(label="Ile czasu dziennie mógłbyś poświęcić?", required=True)
-    about = discord.ui.TextInput(label="Napisz coś o sobie", style=discord.TextStyle.paragraph, required=True)
+    about = discord.ui.TextInput(label="Napisz coś o sobie", style=discord.TextStyle.paragraph, required=True, max_length=1024)
     async def on_submit(self, interaction: discord.Interaction):
         await create_generic_post(self, interaction, "Podanie Admin DC", "📄")
 
@@ -459,7 +465,7 @@ class ForumSelect(discord.ui.Select):
         modal_map = {"Propozycja JB": SuggestionModal, "Propozycja DC": SuggestionModal, "Błąd JB": BugReportModal, "Błąd DC": BugReportModal, "Skarga JB": ComplaintModal, "Skarga DC": ComplaintModal, "Odwołanie JB": AppealModal, "Odwołanie DC": AppealModal}
         if choice in modal_map: await interaction.response.send_modal(modal_map[choice](choice)); return
         if choice.startswith("Podanie"):
-            requirements_map = {"Podanie Admin JB": "• Minimum 16 lat\n• Co najmniej 10 godzin tygodniowo spędzonych na serwerze w ostatnim czasie\n• Minimum 60 godzin przegranych na serwerze\n• Nieposzlakowana opinia wśród graczy oraz innych administratorów\n• Wysoka kultura osobista i umiejętność pracy w zespole\n• Umiejętność podejmowania obiektywnych i trzeźwych decyzji\n• Perfekcyjna znajomość regulaminu oraz taryfikatora banów\n• Dobra znajomość naszego mod'a serwerowego oraz jego zasad\n• Posiadanie dobrego mikrofonu oraz mutacji \n• Umiejętność opanowania emocji i zachowanie zimnej krwi w trudnych sytuacjach", "Podanie Zaufany JB": "• Minimum 14 lat\n• Co najmniej 10 godzin tygodniowo spędzonych na serwerze w ostatnim czasie\n• Minimum 70 godzin przegranych na serwerze\n•  Nieposzlakowana opinia wśród graczy oraz innych administratorów\n• Wysoka kultura osobista i umiejętność pracy w zespole\n• Umiejętność podejmowania obiektywnych i trzeźwych decyzji\n• Perfekcyjna znajomość regulaminu oraz taryfikatora banów\n• Dobra znajomość naszego mod'a serwerowego oraz jego zasad\n• Posiadanie dobrego mikrofonu oraz mutacji (w przypadku aplikacji na Junior Admina)\n• Umiejętność opanowania emocji i zachowanie zimnej krwi w trudnych sytuacjach", "Podanie Admin DC": "• Doświadczenie z Discordem\n• ..."}
+            requirements_map = {"Podanie Admin JB": "• Minimum 16 lat\n• ...", "Podanie Zaufany JB": "• Minimum 14 lat\n• ...", "Podanie Admin DC": "• Doświadczenie z Discordem\n• ..."}
             embed = discord.Embed(title=f"📝 Wymagania - {choice}", description=requirements_map.get(choice, "Brak zdefiniowanych wymagań."), color=COLORS["main"])
             if LOGO_URL: embed.set_thumbnail(url=LOGO_URL)
             embed.set_footer(text=FOOTER_TEXT)
@@ -690,6 +696,14 @@ class ShopItemSelect(discord.ui.Select):
             await interaction.followup.send("❌ Ten przedmiot jest już wyprzedany!", ephemeral=True)
             conn.close()
             return
+            
+        # Sprawdzenie czy użytkownik już kupił ten przedmiot (tylko dla Specjalnych ról)
+        if category == "Specjalne role":
+            cursor.execute("SELECT 1 FROM shop_purchases WHERE user_id = ? AND item_id = ?", (interaction.user.id, item_id))
+            if cursor.fetchone():
+                await interaction.followup.send("❌ Już posiadasz ten unikalny przedmiot!", ephemeral=True)
+                conn.close()
+                return
 
         cursor.execute("SELECT points FROM reputation_points WHERE user_id = ?", (str(interaction.user.id),))
         user_points_row = cursor.fetchone()
@@ -704,6 +718,8 @@ class ShopItemSelect(discord.ui.Select):
         cursor.execute("UPDATE reputation_points SET points = ? WHERE user_id = ?", (new_points, str(interaction.user.id)))
         if stock is not None:
             cursor.execute("UPDATE shop_items SET stock = stock - 1 WHERE id = ?", (item_id,))
+        if category == "Specjalne role":
+            cursor.execute("INSERT INTO shop_purchases (user_id, item_id) VALUES (?, ?)", (interaction.user.id, item_id))
         conn.commit()
         conn.close()
 
