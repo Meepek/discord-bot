@@ -41,6 +41,7 @@ SHOP_CONFIG = {
 }
 SHOP_CATEGORIES = ["Specjalne role", "VIP", "Premium", "Fajki", "Oferty Dnia", "Inne"]
 RECRUITMENT_TYPES = ["Podanie Admin JB", "Podanie Zaufany JB", "Podanie Admin DC"]
+RECRUITMENT_ADMIN_ROLES = ["Opiekun JB", "Zarząd", "Właściciel"] # Role uprawnione do /rekrutacja
 
 # --- SZABLONY ODPOWIEDZI ---
 RESPONSE_TEMPLATES = {
@@ -1021,6 +1022,11 @@ async def reputacja_ustaw(interaction: discord.Interaction, uzytkownik: discord.
 
 @recruitment_group.command(name="otworz", description="Otwiera rekrutację na dane stanowisko.")
 async def rekrutacja_otworz(interaction: discord.Interaction, stanowisko: str):
+    # Sprawdzanie uprawnień wewnątrz komendy
+    if not any(role.name in RECRUITMENT_ADMIN_ROLES for role in interaction.user.roles) and not interaction.user.guild_permissions.administrator:
+        await interaction.response.send_message("❌ Nie masz uprawnień do użycia tej komendy.", ephemeral=True)
+        return
+        
     if stanowisko not in RECRUITMENT_TYPES:
         await interaction.response.send_message(f"❌ Nieprawidłowe stanowisko. Dostępne: {', '.join(RECRUITMENT_TYPES)}", ephemeral=True)
         return
@@ -1033,6 +1039,11 @@ async def rekrutacja_otworz(interaction: discord.Interaction, stanowisko: str):
 
 @recruitment_group.command(name="zamknij", description="Zamyka rekrutację na dane stanowisko.")
 async def rekrutacja_zamknij(interaction: discord.Interaction, stanowisko: str):
+    # Sprawdzanie uprawnień wewnątrz komendy
+    if not any(role.name in RECRUITMENT_ADMIN_ROLES for role in interaction.user.roles) and not interaction.user.guild_permissions.administrator:
+        await interaction.response.send_message("❌ Nie masz uprawnień do użycia tej komendy.", ephemeral=True)
+        return
+
     if stanowisko not in RECRUITMENT_TYPES:
         await interaction.response.send_message(f"❌ Nieprawidłowe stanowisko. Dostępne: {', '.join(RECRUITMENT_TYPES)}", ephemeral=True)
         return
