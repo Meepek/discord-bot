@@ -168,6 +168,7 @@ def init_database():
             title TEXT NOT NULL,
             data TEXT NOT NULL,
             thread_id INTEGER NOT NULL,
+            status TEXT DEFAULT 'Oczekuje',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )''')
     
@@ -1172,6 +1173,18 @@ async def setup_forum_rekrutacje_kreatywne(interaction: discord.Interaction, kan
     await kanal_forum.create_thread(name="Panel Rekrutacyjny - Role Kreatywne", embed=embed, view=ForumSelectionView("creative_recruitment"))
     await interaction.response.send_message(f"✅ Panel rekrutacji kreatywnej został utworzony na {kanal_forum.mention}!", ephemeral=True)
     await log_action(interaction.guild, "Stworzono panel rekrutacji kreatywnych", interaction.user, f"Kanał: {kanal_forum.mention}")
+
+@bot.tree.command(name="setup_forum_zlecenia", description="Tworzy panel do zleceń graficznych.")
+async def setup_forum_zlecenia(interaction: discord.Interaction, kanal_forum: discord.ForumChannel):
+    if not is_authorized(interaction, SETUP_ADMIN_ROLES):
+        await interaction.response.send_message("❌ Nie masz uprawnień do użycia tej komendy.", ephemeral=True)
+        return
+    embed = discord.Embed(title="🎨 Centrum Zleceń Graficznych", description="Potrzebujesz grafiki? Złóż zlecenie, klikając przycisk poniżej!", color=COLORS["main"])
+    if LOGO_URL: embed.set_thumbnail(url=LOGO_URL)
+    embed.set_footer(text=FOOTER_TEXT)
+    await kanal_forum.create_thread(name="Panel Zleceń Graficznych", embed=embed, view=CommissionView())
+    await interaction.response.send_message(f"✅ Panel zleceń graficznych został utworzony na {kanal_forum.mention}!", ephemeral=True)
+    await log_action(interaction.guild, "Stworzono panel zleceń", interaction.user, f"Kanał: {kanal_forum.mention}")
 
 @bot.tree.command(name="info", description="Wyświetla informacje o aktywności użytkownika.")
 async def info(interaction: discord.Interaction, uzytkownik: discord.Member):
