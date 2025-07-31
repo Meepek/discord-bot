@@ -41,7 +41,9 @@ SHOP_CONFIG = {
     "manual_reward_roles": ["Opiekun JB", "Zarząd", "Właściciel"] 
 }
 SHOP_CATEGORIES = ["Specjalne role", "VIP", "Premium", "Fajki", "Oferty Dnia", "Inne"]
-RECRUITMENT_TYPES = ["Podanie Admin JB", "Podanie Zaufany JB", "Podanie Admin DC"]
+ADMIN_RECRUITMENT_TYPES = ["Podanie Admin JB", "Podanie Zaufany JB", "Podanie Admin DC"]
+CREATIVE_RECRUITMENT_TYPES = ["Podanie Developer", "Podanie MapDeveloper", "Podanie Grafik", "Podanie Redaktor"]
+ALL_RECRUITMENT_TYPES = ADMIN_RECRUITMENT_TYPES + CREATIVE_RECRUITMENT_TYPES
 
 # --- ZARZĄDZANIE UPRAWNIENIAMI ---
 SETUP_ADMIN_ROLES = ["Właściciel", "Zarząd"]
@@ -145,7 +147,6 @@ def init_database():
             position TEXT PRIMARY KEY,
             is_open INTEGER DEFAULT 1
         )''')
-    # NOWA TABELA: Eventy
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS events (
             message_id INTEGER PRIMARY KEY,
@@ -345,6 +346,38 @@ class DiscordAdminApplicationModal(discord.ui.Modal, title="Podanie Admin DC"):
     about = discord.ui.TextInput(label="Napisz coś o sobie", style=discord.TextStyle.paragraph, required=True, max_length=1024)
     async def on_submit(self, interaction: discord.Interaction):
         await create_generic_post(self, interaction, "Podanie Admin DC", "📄")
+
+class DeveloperApplicationModal(discord.ui.Modal, title="Podanie Developer"):
+    age = discord.ui.TextInput(label="Wiek", required=True, max_length=3)
+    experience = discord.ui.TextInput(label="Opisz swoje doświadczenie w programowaniu", style=discord.TextStyle.paragraph, required=True, max_length=1024)
+    portfolio = discord.ui.TextInput(label="Link do portfolio (np. GitHub)", required=True)
+    about = discord.ui.TextInput(label="Napisz coś o sobie", style=discord.TextStyle.paragraph, required=True, max_length=1024)
+    async def on_submit(self, interaction: discord.Interaction):
+        await create_generic_post(self, interaction, "Podanie Developer", "💻")
+
+class MapDeveloperApplicationModal(discord.ui.Modal, title="Podanie MapDeveloper"):
+    age = discord.ui.TextInput(label="Wiek", required=True, max_length=3)
+    experience = discord.ui.TextInput(label="Opisz swoje doświadczenie w tworzeniu map", style=discord.TextStyle.paragraph, required=True, max_length=1024)
+    portfolio = discord.ui.TextInput(label="Link do portfolio (np. Warsztat Steam)", required=True)
+    about = discord.ui.TextInput(label="Napisz coś o sobie", style=discord.TextStyle.paragraph, required=True, max_length=1024)
+    async def on_submit(self, interaction: discord.Interaction):
+        await create_generic_post(self, interaction, "Podanie MapDeveloper", "🗺️")
+
+class GraphicDesignerApplicationModal(discord.ui.Modal, title="Podanie Grafik"):
+    age = discord.ui.TextInput(label="Wiek", required=True, max_length=3)
+    experience = discord.ui.TextInput(label="Opisz swoje doświadczenie w grafice", style=discord.TextStyle.paragraph, required=True, max_length=1024)
+    portfolio = discord.ui.TextInput(label="Link do portfolio (np. Behance, ArtStation)", required=True)
+    about = discord.ui.TextInput(label="Napisz coś o sobie", style=discord.TextStyle.paragraph, required=True, max_length=1024)
+    async def on_submit(self, interaction: discord.Interaction):
+        await create_generic_post(self, interaction, "Podanie Grafik", "🎨")
+
+class EditorApplicationModal(discord.ui.Modal, title="Podanie Redaktor"):
+    age = discord.ui.TextInput(label="Wiek", required=True, max_length=3)
+    experience = discord.ui.TextInput(label="Opisz swoje doświadczenie w redakcji/pisaniu", style=discord.TextStyle.paragraph, required=True, max_length=1024)
+    portfolio = discord.ui.TextInput(label="Link do przykładowych prac/tekstów", required=True)
+    about = discord.ui.TextInput(label="Napisz coś o sobie", style=discord.TextStyle.paragraph, required=True, max_length=1024)
+    async def on_submit(self, interaction: discord.Interaction):
+        await create_generic_post(self, interaction, "Podanie Redaktor", "✍️")
 
 class DecisionReasonModal(discord.ui.Modal, title="Uzasadnienie decyzji"):
     reason_input = discord.ui.TextInput(label="Notatka (opcjonalnie)", style=discord.TextStyle.paragraph, required=False, max_length=1024)
@@ -585,10 +618,24 @@ class ForumSelect(discord.ui.Select):
             conn = sqlite3.connect('/data/bot_database.db')
             cursor = conn.cursor()
             options = []
-            for position in RECRUITMENT_TYPES:
+            for position in ADMIN_RECRUITMENT_TYPES:
                 cursor.execute("SELECT is_open FROM recruitment_status WHERE position = ?", (position,))
                 status = cursor.fetchone()
-                is_open = status[0] if status else 1  # Domyślnie otwarte
+                is_open = status[0] if status else 1
+                label = position
+                if not is_open:
+                    label += " (Zamknięta)"
+                options.append(discord.SelectOption(label=label, value=position, emoji="📄"))
+            conn.close()
+        elif view_type == "creative_recruitment":
+            placeholder = "Wybierz stanowisko, na które aplikujesz..."
+            conn = sqlite3.connect('/data/bot_database.db')
+            cursor = conn.cursor()
+            options = []
+            for position in CREATIVE_RECRUITMENT_TYPES:
+                cursor.execute("SELECT is_open FROM recruitment_status WHERE position = ?", (position,))
+                status = cursor.fetchone()
+                is_open = status[0] if status else 1
                 label = position
                 if not is_open:
                     label += " (Zamknięta)"
@@ -611,8 +658,22 @@ class ForumSelect(discord.ui.Select):
             await interaction.response.send_message("❌ Rekrutacja na to stanowisko jest obecnie zamknięta.", ephemeral=True)
             return
 
-        modal_map = {"Propozycja JB": SuggestionModal, "Propozycja DC": SuggestionModal, "Błąd JB": BugReportModal, "Błąd DC": BugReportModal, "Skarga JB": ComplaintModal, "Skarga DC": ComplaintModal, "Odwołanie JB": AppealModal, "Odwołanie DC": AppealModal}
-        if choice in modal_map: await interaction.response.send_modal(modal_map[choice](choice)); return
+        modal_map = {
+            "Propozycja JB": SuggestionModal, "Propozycja DC": SuggestionModal, 
+            "Błąd JB": BugReportModal, "Błąd DC": BugReportModal, 
+            "Skarga JB": ComplaintModal, "Skarga DC": ComplaintModal, 
+            "Odwołanie JB": AppealModal, "Odwołanie DC": AppealModal,
+            "Podanie Admin JB": AdminApplicationModal, "Podanie Zaufany JB": TrustedApplicationModal, "Podanie Admin DC": DiscordAdminApplicationModal,
+            "Podanie Developer": DeveloperApplicationModal, "Podanie MapDeveloper": MapDeveloperApplicationModal,
+            "Podanie Grafik": GraphicDesignerApplicationModal, "Podanie Redaktor": EditorApplicationModal
+        }
+        if choice in modal_map:
+            if choice.startswith(("Propozycja", "Błąd", "Skarga", "Odwołanie")):
+                await interaction.response.send_modal(modal_map[choice](choice))
+            else:
+                await interaction.response.send_modal(modal_map[choice]())
+            return
+        
         if choice.startswith("Podanie"):
             requirements_map = {"Podanie Admin JB": "• Minimum 16 lat\n• ...", "Podanie Zaufany JB": "• Minimum 14 lat\n• ...", "Podanie Admin DC": "• Doświadczenie z Discordem\n• ..."}
             embed = discord.Embed(title=f"📝 Wymagania - {choice}", description=requirements_map.get(choice, "Brak zdefiniowanych wymagań."), color=COLORS["main"])
@@ -634,7 +695,15 @@ class RequirementsView(discord.ui.View):
             self.add_item(stats_btn)
 
     async def continue_callback(self, interaction: discord.Interaction):
-        modal_map = {"Podanie Admin JB": AdminApplicationModal, "Podanie Zaufany JB": TrustedApplicationModal, "Podanie Admin DC": DiscordAdminApplicationModal}
+        modal_map = {
+            "Podanie Admin JB": AdminApplicationModal, 
+            "Podanie Zaufany JB": TrustedApplicationModal, 
+            "Podanie Admin DC": DiscordAdminApplicationModal,
+            "Podanie Developer": DeveloperApplicationModal,
+            "Podanie MapDeveloper": MapDeveloperApplicationModal,
+            "Podanie Grafik": GraphicDesignerApplicationModal,
+            "Podanie Redaktor": EditorApplicationModal
+        }
         if self.application_type in modal_map:
             await interaction.response.send_modal(modal_map[self.application_type]())
         self.stop()
@@ -961,16 +1030,27 @@ async def setup_forum_skargi(interaction: discord.Interaction, kanal_forum: disc
     await kanal_forum.create_thread(name="Panel Zgłoszeń - Skargi i Odwołania", embed=embed, view=ForumSelectionView("complaints_appeals"))
     await interaction.response.send_message(f"✅ Panel utworzony na {kanal_forum.mention}!", ephemeral=True)
 
-@bot.tree.command(name="setup_forum_rekrutacje", description="Tworzy panel rekrutacyjny na kanale forum.")
+@bot.tree.command(name="setup_forum_rekrutacje", description="Tworzy panel rekrutacyjny dla ról admin.")
 async def setup_forum_rekrutacje(interaction: discord.Interaction, kanal_forum: discord.ForumChannel):
     if not is_authorized(interaction, SETUP_ADMIN_ROLES):
         await interaction.response.send_message("❌ Nie masz uprawnień do użycia tej komendy.", ephemeral=True)
         return
-    embed = discord.Embed(title="📝 Centrum Rekrutacji", description="Chcesz dołączyć do ekipy? Wybierz stanowisko z menu poniżej.", color=COLORS["main"])
+    embed = discord.Embed(title="📝 Centrum Rekrutacji Administracji", description="Chcesz dołączyć do ekipy administracyjnej? Wybierz stanowisko z menu poniżej.", color=COLORS["main"])
     if LOGO_URL: embed.set_thumbnail(url=LOGO_URL)
     embed.set_footer(text=FOOTER_TEXT)
-    await kanal_forum.create_thread(name="Panel Rekrutacyjny", embed=embed, view=ForumSelectionView("recruitment"))
-    await interaction.response.send_message(f"✅ Panel rekrutacyjny utworzony na {kanal_forum.mention}!", ephemeral=True)
+    await kanal_forum.create_thread(name="Panel Rekrutacyjny - Administracja", embed=embed, view=ForumSelectionView("recruitment"))
+    await interaction.response.send_message(f"✅ Panel rekrutacyjny został utworzony na {kanal_forum.mention}!", ephemeral=True)
+
+@bot.tree.command(name="setup_forum_rekrutacje_kreatywne", description="Tworzy panel rekrutacyjny dla ról kreatywnych.")
+async def setup_forum_rekrutacje_kreatywne(interaction: discord.Interaction, kanal_forum: discord.ForumChannel):
+    if not is_authorized(interaction, SETUP_ADMIN_ROLES):
+        await interaction.response.send_message("❌ Nie masz uprawnień do użycia tej komendy.", ephemeral=True)
+        return
+    embed = discord.Embed(title="🎨 Centrum Rekrutacji Kreatywnej", description="Chcesz dołączyć do ekipy kreatywnej? Wybierz stanowisko z menu poniżej.", color=COLORS["main"])
+    if LOGO_URL: embed.set_thumbnail(url=LOGO_URL)
+    embed.set_footer(text=FOOTER_TEXT)
+    await kanal_forum.create_thread(name="Panel Rekrutacyjny - Role Kreatywne", embed=embed, view=ForumSelectionView("creative_recruitment"))
+    await interaction.response.send_message(f"✅ Panel rekrutacji kreatywnej został utworzony na {kanal_forum.mention}!", ephemeral=True)
 
 @bot.tree.command(name="info", description="Wyświetla informacje o aktywności użytkownika.")
 async def info(interaction: discord.Interaction, uzytkownik: discord.Member):
@@ -1172,15 +1252,15 @@ async def rekrutacja_otworz(interaction: discord.Interaction, stanowisko: str):
         await interaction.response.send_message("❌ Nie masz uprawnień do użycia tej komendy.", ephemeral=True)
         return
         
-    if stanowisko not in RECRUITMENT_TYPES:
-        await interaction.response.send_message(f"❌ Nieprawidłowe stanowisko. Dostępne: {', '.join(RECRUITMENT_TYPES)}", ephemeral=True)
+    if stanowisko not in ALL_RECRUITMENT_TYPES:
+        await interaction.response.send_message(f"❌ Nieprawidłowe stanowisko.", ephemeral=True)
         return
     conn = sqlite3.connect('/data/bot_database.db')
     cursor = conn.cursor()
     cursor.execute("INSERT OR REPLACE INTO recruitment_status (position, is_open) VALUES (?, 1)", (stanowisko,))
     conn.commit()
     conn.close()
-    await interaction.response.send_message(f"✅ Rekrutacja na stanowisko **{stanowisko}** została **otwarta**.\n> Pamiętaj, aby odświeżyć panel komendą `/setup_forum_rekrutacje`!", ephemeral=True)
+    await interaction.response.send_message(f"✅ Rekrutacja na stanowisko **{stanowisko}** została **otwarta**.\n> Pamiętaj, aby odświeżyć odpowiedni panel rekrutacyjny!", ephemeral=True)
 
 @recruitment_group.command(name="zamknij", description="Zamyka rekrutację na dane stanowisko.")
 async def rekrutacja_zamknij(interaction: discord.Interaction, stanowisko: str):
@@ -1188,20 +1268,20 @@ async def rekrutacja_zamknij(interaction: discord.Interaction, stanowisko: str):
         await interaction.response.send_message("❌ Nie masz uprawnień do użycia tej komendy.", ephemeral=True)
         return
 
-    if stanowisko not in RECRUITMENT_TYPES:
-        await interaction.response.send_message(f"❌ Nieprawidłowe stanowisko. Dostępne: {', '.join(RECRUITMENT_TYPES)}", ephemeral=True)
+    if stanowisko not in ALL_RECRUITMENT_TYPES:
+        await interaction.response.send_message(f"❌ Nieprawidłowe stanowisko.", ephemeral=True)
         return
     conn = sqlite3.connect('/data/bot_database.db')
     cursor = conn.cursor()
     cursor.execute("INSERT OR REPLACE INTO recruitment_status (position, is_open) VALUES (?, 0)", (stanowisko,))
     conn.commit()
     conn.close()
-    await interaction.response.send_message(f"✅ Rekrutacja na stanowisko **{stanowisko}** została **zamknięta**.\n> Pamiętaj, aby odświeżyć panel komendą `/setup_forum_rekrutacje`!", ephemeral=True)
+    await interaction.response.send_message(f"✅ Rekrutacja na stanowisko **{stanowisko}** została **zamknięta**.\n> Pamiętaj, aby odświeżyć odpowiedni panel rekrutacyjny!", ephemeral=True)
 
 @rekrutacja_otworz.autocomplete('stanowisko')
 @rekrutacja_zamknij.autocomplete('stanowisko')
 async def rekrutacja_autocomplete(interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
-    return [app_commands.Choice(name=pos, value=pos) for pos in RECRUITMENT_TYPES if current.lower() in pos.lower()]
+    return [app_commands.Choice(name=pos, value=pos) for pos in ALL_RECRUITMENT_TYPES if current.lower() in pos.lower()]
 
 @announcement_group.command(name="zwykle", description="Tworzy standardowe ogłoszenie.")
 async def ogloszenie_zwykle(interaction: discord.Interaction, kanal: discord.TextChannel, rola: Optional[discord.Role] = None):
@@ -1300,6 +1380,7 @@ async def on_ready():
     bot.add_view(ForumSelectionView("proposals_bugs"))
     bot.add_view(ForumSelectionView("complaints_appeals"))
     bot.add_view(ForumSelectionView("recruitment"))
+    bot.add_view(ForumSelectionView("creative_recruitment"))
     bot.add_view(ShopView()) # Rejestracja widoku sklepu
     bot.add_view(EventView()) # Rejestracja widoku eventu
     
