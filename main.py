@@ -417,6 +417,45 @@ class EventModal(discord.ui.Modal, title="Nowe wydarzenie"):
 
         await interaction.response.send_message("✅ Wydarzenie zostało pomyślnie opublikowane.", ephemeral=True)
 
+# --- WIDOK EVENTU ---
+class EventView(discord.ui.View):
+    def __init__(self, initial_count: int = 0):
+        super().__init__(timeout=None)
+        self.signup_button = discord.ui.Button(label=f"Zapisz się! ({initial_count})", style=discord.ButtonStyle.success, custom_id="event_signup_button", emoji="✅")
+        self.signup_button.callback = self.signup_callback
+        self.add_item(self.signup_button)
+
+    async def signup_callback(self, interaction: discord.Interaction):
+        await interaction.response.defer()
+        
+        conn = sqlite3.connect('/data/bot_database.db')
+        cursor = conn.cursor()
+        cursor.execute("SELECT attendees FROM events WHERE message_id = ?", (interaction.message.id,))
+        data = cursor.fetchone()
+
+        if not data:
+            conn.close()
+            await interaction.followup.send("❌ Wystąpił błąd z tym wydarzeniem.", ephemeral=True)
+            return
+
+        attendees = json.loads(data[0])
+        user_id = interaction.user.id
+
+        if user_id in attendees:
+            attendees.remove(user_id)
+            await interaction.followup.send("✅ Zostałeś wypisany z wydarzenia.", ephemeral=True)
+        else:
+            attendees.append(user_id)
+            await interaction.followup.send("✅ Zostałeś zapisany na wydarzenie!", ephemeral=True)
+
+        cursor.execute("UPDATE events SET attendees = ? WHERE message_id = ?", (json.dumps(attendees), interaction.message.id))
+        conn.commit()
+        conn.close()
+
+        # Aktualizacja przycisku
+        self.signup_button.label = f"Zapisz się! ({len(attendees)})"
+        await interaction.edit_original_response(view=self)
+
 # --- LOGIKA DECYZJI ---
 async def process_decision(interaction: discord.Interaction, original_interaction: discord.Interaction, action: str, post_type: str, author_id: int, reason_text: str):
     original_message = original_interaction.message
