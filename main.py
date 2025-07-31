@@ -51,6 +51,7 @@ SHOP_ADMIN_ROLES = ["Właściciel", "Zarząd"]
 REPUTATION_ADMIN_ROLES = ["Właściciel", "Zarząd"]
 RECRUITMENT_ADMIN_ROLES = ["Opiekun JB", "Zarząd", "Właściciel"]
 CREATIVE_RECRUITMENT_ADMIN_ROLES = ["Właściciel", "Zarząd"]
+ANNOUNCEMENT_ADMIN_ROLES = ["Właściciel", "Zarząd"]
 REDAKCJA_ROLES = ["Właściciel", "Zarząd", "Redaktor"] 
 GENERAL_ADMIN_ROLES = ["Właściciel", "Zarząd", "Opiekun JB", "Opiekun Discord"] 
 
@@ -147,6 +148,12 @@ def init_database():
         CREATE TABLE IF NOT EXISTS recruitment_status (
             position TEXT PRIMARY KEY,
             is_open INTEGER DEFAULT 1
+        )''')
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS events (
+            message_id INTEGER PRIMARY KEY,
+            author_id INTEGER NOT NULL,
+            attendees TEXT NOT NULL
         )''')
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS editorial_counters (
@@ -394,6 +401,63 @@ class DecisionReasonModal(discord.ui.Modal, title="Uzasadnienie decyzji"):
         await interaction.response.defer()
         await process_decision(interaction, self.original_interaction, self.action, self.post_type, self.author_id, self.reason_input.value)
 
+class AnnouncementModal(discord.ui.Modal, title="Nowe ogłoszenie"):
+    title_input = discord.ui.TextInput(label="Tytuł ogłoszenia", required=True, max_length=256)
+    content_input = discord.ui.TextInput(label="Treść ogłoszenia", style=discord.TextStyle.paragraph, required=True, max_length=4000)
+
+    def __init__(self, channel: discord.TextChannel, role: Optional[discord.Role]):
+        super().__init__()
+        self.channel = channel
+        self.role = role
+
+    async def on_submit(self, interaction: discord.Interaction):
+        embed = discord.Embed(title=self.title_input.value, description=self.content_input.value, color=COLORS["main"], timestamp=datetime.now(POLAND_TZ))
+        if LOGO_URL: embed.set_thumbnail(url=LOGO_URL)
+        embed.set_footer(text=f"Ogłoszenie dodane przez: {interaction.user.display_name} | {FOOTER_TEXT}")
+        
+        role_mention = self.role.mention if self.role else ""
+        await self.channel.send(content=role_mention, embed=embed)
+        await interaction.response.send_message("✅ Ogłoszenie zostało pomyślnie opublikowane.", ephemeral=True)
+
+class EventModal(discord.ui.Modal, title="Nowe wydarzenie"):
+    title_input = discord.ui.TextInput(label="Tytuł wydarzenia", required=True, max_length=256)
+    datetime_input = discord.ui.TextInput(label="Data i godzina (DD.MM.RRRR HH:MM)", placeholder="np. 25.12.2025 18:00", required=True)
+    rewards_input = discord.ui.TextInput(label="Nagrody", required=False, max_length=1024)
+    content_input = discord.ui.TextInput(label="Opis wydarzenia", style=discord.TextStyle.paragraph, required=True, max_length=2000)
+
+    def __init__(self, channel: discord.TextChannel, role: Optional[discord.Role]):
+        super().__init__()
+        self.channel = channel
+        self.role = role
+
+    async def on_submit(self, interaction: discord.Interaction):
+        try:
+            dt_object = datetime.strptime(self.datetime_input.value, "%d.%m.%Y %H:%M")
+            localized_dt = POLAND_TZ.localize(dt_object)
+            timestamp = int(localized_dt.timestamp())
+        except ValueError:
+            await interaction.response.send_message("❌ Nieprawidłowy format daty! Użyj `DD.MM.RRRR HH:MM`.", ephemeral=True)
+            return
+
+        embed = discord.Embed(title=f"🎉 Nowe wydarzenie: {self.title_input.value}", description=self.content_input.value, color=COLORS["success"], timestamp=datetime.now(POLAND_TZ))
+        embed.add_field(name="📅 Kiedy?", value=f"<t:{timestamp}:F> (<t:{timestamp}:R>)", inline=False)
+        if self.rewards_input.value:
+            embed.add_field(name="🏆 Nagrody", value=self.rewards_input.value, inline=False)
+        if LOGO_URL: embed.set_thumbnail(url=LOGO_URL)
+        embed.set_footer(text=f"Wydarzenie zorganizowane przez: {interaction.user.display_name} | {FOOTER_TEXT}")
+        
+        role_mention = self.role.mention if self.role else ""
+        
+        message = await self.channel.send(content=role_mention, embed=embed, view=EventView(initial_count=0))
+        
+        conn = sqlite3.connect('/data/bot_database.db')
+        cursor = conn.cursor()
+        cursor.execute("INSERT INTO events (message_id, author_id, attendees) VALUES (?, ?, ?)", (message.id, interaction.user.id, json.dumps([])))
+        conn.commit()
+        conn.close()
+
+        await interaction.response.send_message("✅ Wydarzenie zostało pomyślnie opublikowane.", ephemeral=True)
+
 class QuickShotModal(discord.ui.Modal, title="Nowy Szybki Strzał"):
     title_input = discord.ui.TextInput(label="Tytuł (np. Szybkie strzały z @User)", required=True)
     interviewer = discord.ui.TextInput(label="Osoba przeprowadzająca", required=True)
@@ -429,6 +493,45 @@ class InterviewModal(discord.ui.Modal, title="Nowy Wywiad"):
         
         await interaction.channel.send(embed=embed)
         await interaction.followup.send("✅ Pomyślnie opublikowano Wywiad.", ephemeral=True)
+
+# --- WIDOK EVENTU ---
+class EventView(discord.ui.View):
+    def __init__(self, initial_count: int = 0):
+        super().__init__(timeout=None)
+        self.signup_button = discord.ui.Button(label=f"Zapisz się! ({initial_count})", style=discord.ButtonStyle.success, custom_id="event_signup_button", emoji="✅")
+        self.signup_button.callback = self.signup_callback
+        self.add_item(self.signup_button)
+
+    async def signup_callback(self, interaction: discord.Interaction):
+        await interaction.response.defer()
+        
+        conn = sqlite3.connect('/data/bot_database.db')
+        cursor = conn.cursor()
+        cursor.execute("SELECT attendees FROM events WHERE message_id = ?", (interaction.message.id,))
+        data = cursor.fetchone()
+
+        if not data:
+            conn.close()
+            await interaction.followup.send("❌ Wystąpił błąd z tym wydarzeniem.", ephemeral=True)
+            return
+
+        attendees = json.loads(data[0])
+        user_id = interaction.user.id
+
+        if user_id in attendees:
+            attendees.remove(user_id)
+            await interaction.followup.send("✅ Zostałeś wypisany z wydarzenia.", ephemeral=True)
+        else:
+            attendees.append(user_id)
+            await interaction.followup.send("✅ Zostałeś zapisany na wydarzenie!", ephemeral=True)
+
+        cursor.execute("UPDATE events SET attendees = ? WHERE message_id = ?", (json.dumps(attendees), interaction.message.id))
+        conn.commit()
+        conn.close()
+
+        # Aktualizacja przycisku
+        self.signup_button.label = f"Zapisz się! ({len(attendees)})"
+        await interaction.edit_original_response(view=self)
 
 # --- LOGIKA DECYZJI ---
 async def process_decision(interaction: discord.Interaction, original_interaction: discord.Interaction, action: str, post_type: str, author_id: int, reason_text: str):
