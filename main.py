@@ -50,7 +50,9 @@ SETUP_ADMIN_ROLES = ["Właściciel", "Zarząd"]
 SHOP_ADMIN_ROLES = ["Właściciel", "Zarząd"]
 REPUTATION_ADMIN_ROLES = ["Właściciel", "Zarząd"]
 RECRUITMENT_ADMIN_ROLES = ["Opiekun JB", "Zarząd", "Właściciel"]
+CREATIVE_RECRUITMENT_ADMIN_ROLES = ["Właściciel", "Zarząd"] # NOWA GRUPA UPRAWNIEŃ
 ANNOUNCEMENT_ADMIN_ROLES = ["Właściciel", "Zarząd"]
+REDAKCJA_ROLES = ["Właściciel", "Zarząd", "Redaktor"] 
 GENERAL_ADMIN_ROLES = ["Właściciel", "Zarząd", "Opiekun JB", "Opiekun Discord"] 
 
 
@@ -152,6 +154,11 @@ def init_database():
             message_id INTEGER PRIMARY KEY,
             author_id INTEGER NOT NULL,
             attendees TEXT NOT NULL
+        )''')
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS editorial_counters (
+            type TEXT PRIMARY KEY,
+            count INTEGER DEFAULT 0
         )''')
     
     tables_to_alter = {
@@ -1047,7 +1054,7 @@ async def setup_forum_rekrutacje(interaction: discord.Interaction, kanal_forum: 
 
 @bot.tree.command(name="setup_forum_rekrutacje_kreatywne", description="Tworzy panel rekrutacyjny dla ról kreatywnych.")
 async def setup_forum_rekrutacje_kreatywne(interaction: discord.Interaction, kanal_forum: discord.ForumChannel):
-    if not is_authorized(interaction, SETUP_ADMIN_ROLES):
+    if not is_authorized(interaction, CREATIVE_RECRUITMENT_ADMIN_ROLES):
         await interaction.response.send_message("❌ Nie masz uprawnień do użycia tej komendy.", ephemeral=True)
         return
     embed = discord.Embed(title="🎨 Centrum Rekrutacji Kreatywnej", description="Chcesz dołączyć do ekipy kreatywnej? Wybierz stanowisko z menu poniżej.", color=COLORS["main"])
