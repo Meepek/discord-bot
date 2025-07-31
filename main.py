@@ -464,6 +464,10 @@ class QuickShotModal(discord.ui.Modal, title="Nowy Szybki Strzał"):
     interviewee = discord.ui.TextInput(label="Osoba odpowiadająca", required=True)
     content = discord.ui.TextInput(label="Pytania i Odpowiedzi", style=discord.TextStyle.paragraph, required=True, max_length=4000)
     
+    def __init__(self, channel: discord.ForumChannel):
+        super().__init__()
+        self.channel = channel
+
     async def on_submit(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
         embed = discord.Embed(title=f"🔫 {self.title_input.value}", color=COLORS["main"], timestamp=datetime.now(POLAND_TZ))
@@ -473,7 +477,7 @@ class QuickShotModal(discord.ui.Modal, title="Nowy Szybki Strzał"):
         if LOGO_URL: embed.set_thumbnail(url=LOGO_URL)
         embed.set_footer(text=f"Opublikowane przez: {interaction.user.display_name} | {FOOTER_TEXT}")
         
-        await interaction.channel.send(embed=embed)
+        await self.channel.create_thread(name=self.title_input.value, embed=embed)
         await interaction.followup.send("✅ Pomyślnie opublikowano Szybki Strzał.", ephemeral=True)
 
 class InterviewModal(discord.ui.Modal, title="Nowy Wywiad"):
@@ -482,6 +486,10 @@ class InterviewModal(discord.ui.Modal, title="Nowy Wywiad"):
     interviewee = discord.ui.TextInput(label="Gość wywiadu", required=True)
     content = discord.ui.TextInput(label="Treść wywiadu", style=discord.TextStyle.paragraph, required=True, max_length=4000)
     
+    def __init__(self, channel: discord.ForumChannel):
+        super().__init__()
+        self.channel = channel
+
     async def on_submit(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
         embed = discord.Embed(title=f"🎙️ {self.title_input.value}", color=COLORS["main"], timestamp=datetime.now(POLAND_TZ))
@@ -491,7 +499,7 @@ class InterviewModal(discord.ui.Modal, title="Nowy Wywiad"):
         if LOGO_URL: embed.set_thumbnail(url=LOGO_URL)
         embed.set_footer(text=f"Opublikowane przez: {interaction.user.display_name} | {FOOTER_TEXT}")
         
-        await interaction.channel.send(embed=embed)
+        await self.channel.create_thread(name=self.title_input.value, embed=embed)
         await interaction.followup.send("✅ Pomyślnie opublikowano Wywiad.", ephemeral=True)
 
 # --- WIDOK EVENTU ---
@@ -1360,14 +1368,14 @@ async def szybki_strzal(interaction: discord.Interaction, kanal: discord.ForumCh
     if not is_authorized(interaction, REDAKCJA_ROLES):
         await interaction.response.send_message("❌ Nie masz uprawnień do użycia tej komendy.", ephemeral=True)
         return
-    await interaction.response.send_modal(QuickShotModal())
+    await interaction.response.send_modal(QuickShotModal(channel=kanal))
 
 @redakcja_group.command(name="wywiad", description="Publikuje wywiad.")
 async def wywiad(interaction: discord.Interaction, kanal: discord.ForumChannel):
     if not is_authorized(interaction, REDAKCJA_ROLES):
         await interaction.response.send_message("❌ Nie masz uprawnień do użycia tej komendy.", ephemeral=True)
         return
-    await interaction.response.send_modal(InterviewModal())
+    await interaction.response.send_modal(InterviewModal(channel=kanal))
 
 @redakcja_group.command(name="qa", description="Rozpoczyna sesję Q&A.")
 async def qa(interaction: discord.Interaction, kanal: discord.ForumChannel, tytul: str):
