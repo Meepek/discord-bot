@@ -918,7 +918,7 @@ class ManagementSelect(discord.ui.Select):
 
 class TemplateReasonView(discord.ui.View):
     def __init__(self, original_interaction: discord.Interaction, action: str, post_type: str, author_id: int):
-        super().__init__(timeout=180)
+        super().__init__(timeout=None)
         self.original_interaction = original_interaction
         self.action = action
         self.post_type = post_type
