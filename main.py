@@ -542,7 +542,7 @@ class GraphicCommissionModal(discord.ui.Modal, title="Nowe Zlecenie Graficzne"):
         embed.set_footer(text=FOOTER_TEXT)
         if LOGO_URL: embed.set_thumbnail(url=LOGO_URL)
 
-        thread = await self.channel.create_thread(name=self.title_input.value, embed=embed)
+        thread = await self.channel.create_thread(name=self.title_input.value, embed=embed, view=CommissionManagementView())
         
         # Zapis do bazy
         conn = sqlite3.connect('/data/bot_database.db')
@@ -598,6 +598,71 @@ class EventView(discord.ui.View):
         # Aktualizacja przycisku
         self.signup_button.label = f"Zapisz się! ({len(attendees)})"
         await interaction.edit_original_response(view=self)
+
+# --- WIDOK ZLECEŃ ---
+class CommissionView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+        self.add_item(CommissionButton())
+
+class CommissionButton(discord.ui.Button):
+    def __init__(self):
+        super().__init__(label="Złóż zlecenie na grafikę", style=discord.ButtonStyle.primary, custom_id="commission_button", emoji="🎨")
+
+    async def callback(self, interaction: discord.Interaction):
+        await interaction.response.send_modal(GraphicCommissionModal(channel=interaction.channel))
+
+class CommissionManagementView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+        self.add_item(CommissionManagementSelect())
+
+class CommissionManagementSelect(discord.ui.Select):
+    def __init__(self):
+        options = [
+            discord.SelectOption(label="Przyjmij do realizacji", value="accepted", emoji="🛠️"),
+            discord.SelectOption(label="Odrzuć zlecenie", value="rejected", emoji="❌"),
+            discord.SelectOption(label="Zlecenie zrealizowane", value="completed", emoji="✅")
+        ]
+        super().__init__(placeholder="Zarządzaj zleceniem...", options=options, custom_id="commission_management_select")
+    
+    async def callback(self, interaction: discord.Interaction):
+        if not is_authorized(interaction, ZLECENIA_ADMIN_ROLES):
+            await interaction.response.send_message("❌ Nie masz uprawnień do zarządzania zleceniami.", ephemeral=True)
+            return
+        
+        await interaction.response.defer()
+        
+        status = self.values[0]
+        original_embed = interaction.message.embeds[0]
+        
+        status_map = {
+            "accepted": {"text": "W trakcie realizacji", "color": COLORS["warn"], "prefix": "[W trakcie]", "final": False},
+            "rejected": {"text": "Odrzucone", "color": COLORS["error"], "prefix": "[Odrzucone]", "final": True},
+            "completed": {"text": "Zrealizowane", "color": COLORS["success"], "prefix": "[Zrealizowane]", "final": True}
+        }
+        
+        action_details = status_map[status]
+        original_embed.color = action_details["color"]
+        
+        # Dodanie pola statusu lub jego aktualizacja
+        status_field_found = False
+        for i, field in enumerate(original_embed.fields):
+            if field.name == "📊 Status":
+                original_embed.set_field_at(i, name="📊 Status", value=action_details["text"], inline=False)
+                status_field_found = True
+                break
+        if not status_field_found:
+            original_embed.add_field(name="📊 Status", value=action_details["text"], inline=False)
+
+        await interaction.message.edit(embed=original_embed, view=None if action_details["final"] else self.view)
+        
+        if action_details["final"]:
+            new_name = f"{action_details['prefix']} {interaction.channel.name}"
+            if len(new_name) > 100: new_name = new_name[:97] + "..."
+            await interaction.channel.edit(name=new_name, locked=True)
+
+        await log_action(interaction.guild, f"Zmieniono status zlecenia na: {action_details['text']}", interaction.user, f"Zlecenie: {interaction.channel.mention}")
 
 # --- LOGIKA DECYZJI ---
 async def process_decision(interaction: discord.Interaction, original_interaction: discord.Interaction, action: str, post_type: str, author_id: int, reason_text: str):
