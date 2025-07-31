@@ -1339,6 +1339,59 @@ async def rekrutacja_zamknij(interaction: discord.Interaction, stanowisko: str):
 async def rekrutacja_autocomplete(interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
     return [app_commands.Choice(name=pos, value=pos) for pos in ALL_RECRUITMENT_TYPES if current.lower() in pos.lower()]
 
+@announcement_group.command(name="zwykle", description="Tworzy standardowe ogłoszenie.")
+async def ogloszenie_zwykle(interaction: discord.Interaction, kanal: discord.TextChannel, rola: Optional[discord.Role] = None):
+    if not is_authorized(interaction, ANNOUNCEMENT_ADMIN_ROLES):
+        await interaction.response.send_message("❌ Nie masz uprawnień do użycia tej komendy.", ephemeral=True)
+        return
+    await interaction.response.send_modal(AnnouncementModal(channel=kanal, role=rola))
+
+@announcement_group.command(name="event", description="Tworzy ogłoszenie o wydarzeniu z systemem zapisów.")
+async def ogloszenie_event(interaction: discord.Interaction, kanal: discord.TextChannel, rola: Optional[discord.Role] = None):
+    if not is_authorized(interaction, ANNOUNCEMENT_ADMIN_ROLES):
+        await interaction.response.send_message("❌ Nie masz uprawnień do użycia tej komendy.", ephemeral=True)
+        return
+    await interaction.response.send_modal(EventModal(channel=kanal, role=rola))
+
+@announcement_group.command(name="lista", description="Wyświetla listę osób zapisanych na wydarzenie.")
+async def ogloszenie_lista(interaction: discord.Interaction, id_wiadomosci: str):
+    if not is_authorized(interaction, ANNOUNCEMENT_ADMIN_ROLES):
+        await interaction.response.send_message("❌ Nie masz uprawnień do użycia tej komendy.", ephemeral=True)
+        return
+    
+    try:
+        message_id = int(id_wiadomosci)
+    except ValueError:
+        await interaction.response.send_message("❌ Podane ID wiadomości jest nieprawidłowe.", ephemeral=True)
+        return
+
+    await interaction.response.defer(ephemeral=True)
+    conn = sqlite3.connect('/data/bot_database.db')
+    cursor = conn.cursor()
+    cursor.execute("SELECT attendees FROM events WHERE message_id = ?", (message_id,))
+    data = cursor.fetchone()
+    conn.close()
+
+    if not data:
+        await interaction.followup.send("❌ Nie znaleziono wydarzenia o podanym ID wiadomości.")
+        return
+
+    attendees_ids = json.loads(data[0])
+    if not attendees_ids:
+        await interaction.followup.send("Nikt jeszcze nie zapisał się na to wydarzenie.")
+        return
+
+    mentions = [f"<@{uid}>" for uid in attendees_ids]
+    message_content = f"**Lista zapisanych osób ({len(mentions)}):**\n" + "\n".join(mentions)
+    
+    # Dzielenie wiadomości, jeśli jest za długa
+    if len(message_content) > 2000:
+        parts = [message_content[i:i+1900] for i in range(0, len(message_content), 1900)]
+        for part in parts:
+            await interaction.followup.send(part)
+    else:
+        await interaction.followup.send(message_content)
+
 @redakcja_group.command(name="pytanie_dnia", description="Publikuje nowe pytanie dnia z automatyczną numeracją.")
 async def pytanie_dnia(interaction: discord.Interaction, kanal: discord.ForumChannel, pytanie: str):
     if not is_authorized(interaction, REDAKCJA_ROLES):
