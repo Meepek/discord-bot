@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 import sqlite3
 from typing import Optional
 import pytz
+import re
 
 # --- PODSTAWOWA KONFIGURACJA ---
 intents = discord.Intents.default()
@@ -43,13 +44,12 @@ SHOP_CATEGORIES = ["Specjalne role", "VIP", "Premium", "Fajki", "Oferty Dnia", "
 RECRUITMENT_TYPES = ["Podanie Admin JB", "Podanie Zaufany JB", "Podanie Admin DC"]
 
 # --- ZARZĄDZANIE UPRAWNIENIAMI ---
-# Wpisz tutaj DOKŁADNE nazwy ról, które mają mieć dostęp do poszczególnych grup komend.
-# Użytkownicy z uprawnieniem "Administrator" zawsze mają dostęp.
 SETUP_ADMIN_ROLES = ["Właściciel", "Zarząd"]
 SHOP_ADMIN_ROLES = ["Właściciel", "Zarząd"]
 REPUTATION_ADMIN_ROLES = ["Właściciel", "Zarząd"]
-RECRUITMENT_ADMIN_ROLES = ["Opiekun JB", "Opiekun Discord", "Zarząd", "Właściciel"]
-GENERAL_ADMIN_ROLES = ["Właściciel", "Zarząd", "Opiekun JB", "Opiekun Discord"] # Dla /ankieta itp.
+RECRUITMENT_ADMIN_ROLES = ["Opiekun JB", "Zarząd", "Właściciel"]
+ANNOUNCEMENT_ADMIN_ROLES = ["Właściciel", "Zarząd"]
+GENERAL_ADMIN_ROLES = ["Właściciel", "Zarząd", "Opiekun JB", "Opiekun Discord"] 
 
 
 # --- SZABLONY ODPOWIEDZI ---
@@ -144,6 +144,13 @@ def init_database():
         CREATE TABLE IF NOT EXISTS recruitment_status (
             position TEXT PRIMARY KEY,
             is_open INTEGER DEFAULT 1
+        )''')
+    # NOWA TABELA: Eventy
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS events (
+            message_id INTEGER PRIMARY KEY,
+            author_id INTEGER NOT NULL,
+            attendees TEXT NOT NULL
         )''')
     
     tables_to_alter = {
@@ -353,6 +360,64 @@ class DecisionReasonModal(discord.ui.Modal, title="Uzasadnienie decyzji"):
         await interaction.response.defer()
         await process_decision(interaction, self.original_interaction, self.action, self.post_type, self.author_id, self.reason_input.value)
 
+# --- NOWE MODALE: OGŁOSZENIA I EVENTY ---
+class AnnouncementModal(discord.ui.Modal, title="Nowe ogłoszenie"):
+    title_input = discord.ui.TextInput(label="Tytuł ogłoszenia", required=True, max_length=256)
+    content_input = discord.ui.TextInput(label="Treść ogłoszenia", style=discord.TextStyle.paragraph, required=True, max_length=4000)
+
+    def __init__(self, channel: discord.TextChannel, role: Optional[discord.Role]):
+        super().__init__()
+        self.channel = channel
+        self.role = role
+
+    async def on_submit(self, interaction: discord.Interaction):
+        embed = discord.Embed(title=self.title_input.value, description=self.content_input.value, color=COLORS["main"], timestamp=datetime.now(POLAND_TZ))
+        if LOGO_URL: embed.set_thumbnail(url=LOGO_URL)
+        embed.set_footer(text=f"Ogłoszenie dodane przez: {interaction.user.display_name} | {FOOTER_TEXT}")
+        
+        role_mention = self.role.mention if self.role else ""
+        await self.channel.send(content=role_mention, embed=embed)
+        await interaction.response.send_message("✅ Ogłoszenie zostało pomyślnie opublikowane.", ephemeral=True)
+
+class EventModal(discord.ui.Modal, title="Nowe wydarzenie"):
+    title_input = discord.ui.TextInput(label="Tytuł wydarzenia", required=True, max_length=256)
+    datetime_input = discord.ui.TextInput(label="Data i godzina (DD.MM.RRRR HH:MM)", placeholder="np. 25.12.2025 18:00", required=True)
+    rewards_input = discord.ui.TextInput(label="Nagrody", required=False, max_length=1024)
+    content_input = discord.ui.TextInput(label="Opis wydarzenia", style=discord.TextStyle.paragraph, required=True, max_length=2000)
+
+    def __init__(self, channel: discord.TextChannel, role: Optional[discord.Role]):
+        super().__init__()
+        self.channel = channel
+        self.role = role
+
+    async def on_submit(self, interaction: discord.Interaction):
+        try:
+            dt_object = datetime.strptime(self.datetime_input.value, "%d.%m.%Y %H:%M")
+            localized_dt = POLAND_TZ.localize(dt_object)
+            timestamp = int(localized_dt.timestamp())
+        except ValueError:
+            await interaction.response.send_message("❌ Nieprawidłowy format daty! Użyj `DD.MM.RRRR HH:MM`.", ephemeral=True)
+            return
+
+        embed = discord.Embed(title=f"🎉 Nowe wydarzenie: {self.title_input.value}", description=self.content_input.value, color=COLORS["success"], timestamp=datetime.now(POLAND_TZ))
+        embed.add_field(name="📅 Kiedy?", value=f"<t:{timestamp}:F> (<t:{timestamp}:R>)", inline=False)
+        if self.rewards_input.value:
+            embed.add_field(name="🏆 Nagrody", value=self.rewards_input.value, inline=False)
+        if LOGO_URL: embed.set_thumbnail(url=LOGO_URL)
+        embed.set_footer(text=f"Wydarzenie zorganizowane przez: {interaction.user.display_name} | {FOOTER_TEXT}")
+        
+        role_mention = self.role.mention if self.role else ""
+        
+        message = await self.channel.send(content=role_mention, embed=embed, view=EventView(initial_count=0))
+        
+        conn = sqlite3.connect('/data/bot_database.db')
+        cursor = conn.cursor()
+        cursor.execute("INSERT INTO events (message_id, author_id, attendees) VALUES (?, ?, ?)", (message.id, interaction.user.id, json.dumps([])))
+        conn.commit()
+        conn.close()
+
+        await interaction.response.send_message("✅ Wydarzenie zostało pomyślnie opublikowane.", ephemeral=True)
+
 # --- LOGIKA DECYZJI ---
 async def process_decision(interaction: discord.Interaction, original_interaction: discord.Interaction, action: str, post_type: str, author_id: int, reason_text: str):
     original_message = original_interaction.message
@@ -511,7 +576,7 @@ class ForumSelect(discord.ui.Select):
         modal_map = {"Propozycja JB": SuggestionModal, "Propozycja DC": SuggestionModal, "Błąd JB": BugReportModal, "Błąd DC": BugReportModal, "Skarga JB": ComplaintModal, "Skarga DC": ComplaintModal, "Odwołanie JB": AppealModal, "Odwołanie DC": AppealModal}
         if choice in modal_map: await interaction.response.send_modal(modal_map[choice](choice)); return
         if choice.startswith("Podanie"):
-            requirements_map = {"Podanie Admin JB": "• Minimum 16 lat\n• Co najmniej 10 godzin tygodniowo spędzonych na serwerze w ostatnim czasie\n• Minimum 60 godzin przegranych na serwerze\n• Nieposzlakowana opinia wśród graczy oraz innych administratorów\n• Wysoka kultura osobista i umiejętność pracy w zespole\n• Umiejętność podejmowania obiektywnych i trzeźwych decyzji\n• Perfekcyjna znajomość regulaminu oraz taryfikatora banów\n• Dobra znajomość naszego mod'a serwerowego oraz jego zasad\n• Posiadanie dobrego mikrofonu oraz mutacji \n• Umiejętność opanowania emocji i zachowanie zimnej krwi w trudnych sytuacjach", "Podanie Zaufany JB": "• Minimum 14 lat\n• Co najmniej 10 godzin tygodniowo spędzonych na serwerze w ostatnim czasie\n• Minimum 70 godzin przegranych na serwerze\n•  Nieposzlakowana opinia wśród graczy oraz innych administratorów\n• Wysoka kultura osobista i umiejętność pracy w zespole\n• Umiejętność podejmowania obiektywnych i trzeźwych decyzji\n• Perfekcyjna znajomość regulaminu oraz taryfikatora banów\n• Dobra znajomość naszego mod'a serwerowego oraz jego zasad\n• Posiadanie dobrego mikrofonu oraz mutacji (w przypadku aplikacji na Junior Admina)\n• Umiejętność opanowania emocji i zachowanie zimnej krwi w trudnych sytuacjach", "Podanie Admin DC": "• Doświadczenie z Discordem\n• ..."}
+            requirements_map = {"Podanie Admin JB": "• Minimum 16 lat\n• ...", "Podanie Zaufany JB": "• Minimum 14 lat\n• ...", "Podanie Admin DC": "• Doświadczenie z Discordem\n• ..."}
             embed = discord.Embed(title=f"📝 Wymagania - {choice}", description=requirements_map.get(choice, "Brak zdefiniowanych wymagań."), color=COLORS["main"])
             if LOGO_URL: embed.set_thumbnail(url=LOGO_URL)
             embed.set_footer(text=FOOTER_TEXT)
