@@ -348,34 +348,35 @@ class DiscordAdminApplicationModal(discord.ui.Modal, title="Podanie Admin DC"):
         await create_generic_post(self, interaction, "Podanie Admin DC", "📄")
 
 class DeveloperApplicationModal(discord.ui.Modal, title="Podanie Developer"):
+    nick = discord.ui.TextInput(label="Nick", required=True)
     age = discord.ui.TextInput(label="Wiek", required=True, max_length=3)
-    experience = discord.ui.TextInput(label="Opisz swoje doświadczenie w programowaniu", style=discord.TextStyle.paragraph, required=True, max_length=1024)
-    portfolio = discord.ui.TextInput(label="Link do portfolio (np. GitHub)", required=True)
-    about = discord.ui.TextInput(label="Napisz coś o sobie", style=discord.TextStyle.paragraph, required=True, max_length=1024)
+    why = discord.ui.TextInput(label="Dlaczego chcesz do nas dołączyć?", style=discord.TextStyle.paragraph, required=True, max_length=1024)
+    experience = discord.ui.TextInput(label="Doświadczenie", style=discord.TextStyle.paragraph, required=True, max_length=1024)
     async def on_submit(self, interaction: discord.Interaction):
         await create_generic_post(self, interaction, "Podanie Developer", "💻")
 
 class MapDeveloperApplicationModal(discord.ui.Modal, title="Podanie MapDeveloper"):
+    nick = discord.ui.TextInput(label="Nick", required=True)
     age = discord.ui.TextInput(label="Wiek", required=True, max_length=3)
-    experience = discord.ui.TextInput(label="Opisz swoje doświadczenie w tworzeniu map", style=discord.TextStyle.paragraph, required=True, max_length=1024)
-    portfolio = discord.ui.TextInput(label="Link do portfolio (np. Warsztat Steam)", required=True)
-    about = discord.ui.TextInput(label="Napisz coś o sobie", style=discord.TextStyle.paragraph, required=True, max_length=1024)
+    why = discord.ui.TextInput(label="Dlaczego chcesz do nas dołączyć?", style=discord.TextStyle.paragraph, required=True, max_length=1024)
+    experience = discord.ui.TextInput(label="Doświadczenie", style=discord.TextStyle.paragraph, required=True, max_length=1024)
     async def on_submit(self, interaction: discord.Interaction):
         await create_generic_post(self, interaction, "Podanie MapDeveloper", "🗺️")
 
 class GraphicDesignerApplicationModal(discord.ui.Modal, title="Podanie Grafik"):
+    nick = discord.ui.TextInput(label="Nick", required=True)
     age = discord.ui.TextInput(label="Wiek", required=True, max_length=3)
-    experience = discord.ui.TextInput(label="Opisz swoje doświadczenie w grafice", style=discord.TextStyle.paragraph, required=True, max_length=1024)
-    portfolio = discord.ui.TextInput(label="Link do portfolio (np. Behance, ArtStation)", required=True)
-    about = discord.ui.TextInput(label="Napisz coś o sobie", style=discord.TextStyle.paragraph, required=True, max_length=1024)
+    why = discord.ui.TextInput(label="Dlaczego chcesz do nas dołączyć?", style=discord.TextStyle.paragraph, required=True, max_length=1024)
+    experience = discord.ui.TextInput(label="Doświadczenie", style=discord.TextStyle.paragraph, required=True, max_length=1024)
     async def on_submit(self, interaction: discord.Interaction):
         await create_generic_post(self, interaction, "Podanie Grafik", "🎨")
 
 class EditorApplicationModal(discord.ui.Modal, title="Podanie Redaktor"):
+    name = discord.ui.TextInput(label="Imię", required=True)
     age = discord.ui.TextInput(label="Wiek", required=True, max_length=3)
-    experience = discord.ui.TextInput(label="Opisz swoje doświadczenie w redakcji/pisaniu", style=discord.TextStyle.paragraph, required=True, max_length=1024)
-    portfolio = discord.ui.TextInput(label="Link do przykładowych prac/tekstów", required=True)
-    about = discord.ui.TextInput(label="Napisz coś o sobie", style=discord.TextStyle.paragraph, required=True, max_length=1024)
+    why = discord.ui.TextInput(label="Dlaczego chcesz zostać redaktorem?", style=discord.TextStyle.paragraph, required=True, max_length=1024)
+    experience = discord.ui.TextInput(label="Doświadczenie", style=discord.TextStyle.paragraph, required=True, max_length=1024)
+    example = discord.ui.TextInput(label="Przykładowa treść", style=discord.TextStyle.paragraph, required=True, max_length=1024)
     async def on_submit(self, interaction: discord.Interaction):
         await create_generic_post(self, interaction, "Podanie Redaktor", "✍️")
 
@@ -667,19 +668,22 @@ class ForumSelect(discord.ui.Select):
             "Podanie Developer": DeveloperApplicationModal, "Podanie MapDeveloper": MapDeveloperApplicationModal,
             "Podanie Grafik": GraphicDesignerApplicationModal, "Podanie Redaktor": EditorApplicationModal
         }
-        if choice in modal_map:
-            if choice.startswith(("Propozycja", "Błąd", "Skarga", "Odwołanie")):
-                await interaction.response.send_modal(modal_map[choice](choice))
-            else:
-                await interaction.response.send_modal(modal_map[choice]())
-            return
         
-        if choice.startswith("Podanie"):
-            requirements_map = {"Podanie Admin JB": "• Minimum 16 lat\n• ...", "Podanie Zaufany JB": "• Minimum 14 lat\n• ...", "Podanie Admin DC": "• Doświadczenie z Discordem\n• ..."}
-            embed = discord.Embed(title=f"📝 Wymagania - {choice}", description=requirements_map.get(choice, "Brak zdefiniowanych wymagań."), color=COLORS["main"])
+        # Sprawdzanie, czy dla danego podania są zdefiniowane wymagania
+        requirements_map = {
+            "Podanie Admin JB": "• Minimum 16 lat\n• ...", 
+            "Podanie Zaufany JB": "• Minimum 14 lat\n• ...", 
+            "Podanie Admin DC": "• Doświadczenie z Discordem\n• ...",
+            "Podanie Redaktor": "• Minimum 16 lat\n• Bardzo dobra znajomość języka polskiego (gramatyka, ortografia)\n• Mile widziane doświadczenie, ale nie jest wymagane\n• Kreatywna umiejętność tworzenia ciekawych i angażujących treści\n• Gotowość do regularnego tworzenia treści (np. 1-2 artykuły tygodniowo)\n• Aktywny kontakt z administracją oraz graczami."
+        }
+        
+        if choice in requirements_map:
+            embed = discord.Embed(title=f"📝 Wymagania - {choice}", description=requirements_map.get(choice), color=COLORS["main"])
             if LOGO_URL: embed.set_thumbnail(url=LOGO_URL)
             embed.set_footer(text=FOOTER_TEXT)
             await interaction.response.send_message(embed=embed, view=RequirementsView(choice), ephemeral=True)
+        elif choice in modal_map:
+            await interaction.response.send_modal(modal_map[choice]())
 
 class RequirementsView(discord.ui.View):
     def __init__(self, application_type: str):
@@ -690,7 +694,7 @@ class RequirementsView(discord.ui.View):
         continue_btn.callback = self.continue_callback
         self.add_item(continue_btn)
 
-        if application_type in ["Podanie Admin JB", "Podanie Zaufany JB"]:
+        if self.application_type in ["Podanie Admin JB", "Podanie Zaufany JB"]:
             stats_btn = discord.ui.Button(label="Statystyki serwera", style=discord.ButtonStyle.link, url="https://tsarvar.com/pl/servers/counter-strike-2/91.224.117.153:27015", emoji="📊")
             self.add_item(stats_btn)
 
