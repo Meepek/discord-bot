@@ -1092,6 +1092,7 @@ reputation_group = app_commands.Group(name="reputacja", description="Zarządzani
 recruitment_group = app_commands.Group(name="rekrutacja", description="Zarządzanie statusami rekrutacji.")
 announcement_group = app_commands.Group(name="ogloszenie", description="Zarządzanie ogłoszeniami i eventami.")
 redakcja_group = app_commands.Group(name="redakcja", description="Komendy dla działu redakcji.")
+zlecenia_group = app_commands.Group(name="zlecenie", description="Zarządzanie zleceniami.")
 
 # --- KOMENDY SLASH ---
 @bot.tree.command(name="setup_logi", description="Konfiguruje kanał logów bota.")
@@ -1102,6 +1103,7 @@ async def setup_logi(interaction: discord.Interaction, kanal: discord.TextChanne
     global LOG_CHANNEL_ID
     LOG_CHANNEL_ID = kanal.id
     await interaction.response.send_message(f"✅ Kanał logów został ustawiony na {kanal.mention}.", ephemeral=True)
+    await log_action(interaction.guild, "Skonfigurowano logi", interaction.user, f"Kanał: {kanal.mention}")
 
 @bot.tree.command(name="setup_powiadomienia", description="Konfiguruje powiadomienia dla opiekunów.")
 async def setup_powiadomienia(interaction: discord.Interaction, typ_zgloszenia: str, kanal: discord.TextChannel, rola: Optional[discord.Role] = None):
@@ -1110,6 +1112,7 @@ async def setup_powiadomienia(interaction: discord.Interaction, typ_zgloszenia: 
         return
     NOTIFICATION_CONFIG[typ_zgloszenia] = {'channel_id': kanal.id, 'role_id': rola.id if rola else None}
     await interaction.response.send_message(f"✅ Ustawiono powiadomienia dla `{typ_zgloszenia}` na kanale {kanal.mention}" + (f" z rolą {rola.mention}." if rola else "."), ephemeral=True)
+    await log_action(interaction.guild, "Skonfigurowano powiadomienia", interaction.user, f"Typ: {typ_zgloszenia}, Kanał: {kanal.mention}")
 
 @bot.tree.command(name="setup_przypomnienia", description="Włącza lub wyłącza automatyczne przypomnienia o starych postach.")
 async def setup_przypomnienia(interaction: discord.Interaction, wlaczone: bool, dni: app_commands.Range[int, 1, 30] = 3):
@@ -1120,6 +1123,7 @@ async def setup_przypomnienia(interaction: discord.Interaction, wlaczone: bool, 
     REMINDER_CONFIG["delay_days"] = dni
     status = "włączone" if wlaczone else "wyłączone"
     await interaction.response.send_message(f"✅ Automatyczne przypomnienia zostały **{status}**. Czas oczekiwania: **{dni} dni**.", ephemeral=True)
+    await log_action(interaction.guild, "Skonfigurowano przypomnienia", interaction.user, f"Status: {status}, Dni: {dni}")
 
 @bot.tree.command(name="setup_forum_propozycje", description="Tworzy panel zgłaszania propozycji i błędów.")
 async def setup_forum_propozycje(interaction: discord.Interaction, kanal_forum: discord.ForumChannel):
@@ -1131,6 +1135,7 @@ async def setup_forum_propozycje(interaction: discord.Interaction, kanal_forum: 
     embed.set_footer(text=FOOTER_TEXT)
     await kanal_forum.create_thread(name="Panel Zgłoszeń - Propozycje i Błędy", embed=embed, view=ForumSelectionView("proposals_bugs"))
     await interaction.response.send_message(f"✅ Panel utworzony na {kanal_forum.mention}!", ephemeral=True)
+    await log_action(interaction.guild, "Stworzono panel propozycji", interaction.user, f"Kanał: {kanal_forum.mention}")
 
 @bot.tree.command(name="setup_forum_skargi", description="Tworzy panel składania skarg i odwołań.")
 async def setup_forum_skargi(interaction: discord.Interaction, kanal_forum: discord.ForumChannel):
@@ -1142,6 +1147,7 @@ async def setup_forum_skargi(interaction: discord.Interaction, kanal_forum: disc
     embed.set_footer(text=FOOTER_TEXT)
     await kanal_forum.create_thread(name="Panel Zgłoszeń - Skargi i Odwołania", embed=embed, view=ForumSelectionView("complaints_appeals"))
     await interaction.response.send_message(f"✅ Panel utworzony na {kanal_forum.mention}!", ephemeral=True)
+    await log_action(interaction.guild, "Stworzono panel skarg", interaction.user, f"Kanał: {kanal_forum.mention}")
 
 @bot.tree.command(name="setup_forum_rekrutacje", description="Tworzy panel rekrutacyjny dla ról admin.")
 async def setup_forum_rekrutacje(interaction: discord.Interaction, kanal_forum: discord.ForumChannel):
@@ -1153,6 +1159,7 @@ async def setup_forum_rekrutacje(interaction: discord.Interaction, kanal_forum: 
     embed.set_footer(text=FOOTER_TEXT)
     await kanal_forum.create_thread(name="Panel Rekrutacyjny - Administracja", embed=embed, view=ForumSelectionView("recruitment"))
     await interaction.response.send_message(f"✅ Panel rekrutacyjny został utworzony na {kanal_forum.mention}!", ephemeral=True)
+    await log_action(interaction.guild, "Stworzono panel rekrutacji", interaction.user, f"Kanał: {kanal_forum.mention}")
 
 @bot.tree.command(name="setup_forum_rekrutacje_kreatywne", description="Tworzy panel rekrutacyjny dla ról kreatywnych.")
 async def setup_forum_rekrutacje_kreatywne(interaction: discord.Interaction, kanal_forum: discord.ForumChannel):
@@ -1164,6 +1171,7 @@ async def setup_forum_rekrutacje_kreatywne(interaction: discord.Interaction, kan
     embed.set_footer(text=FOOTER_TEXT)
     await kanal_forum.create_thread(name="Panel Rekrutacyjny - Role Kreatywne", embed=embed, view=ForumSelectionView("creative_recruitment"))
     await interaction.response.send_message(f"✅ Panel rekrutacji kreatywnej został utworzony na {kanal_forum.mention}!", ephemeral=True)
+    await log_action(interaction.guild, "Stworzono panel rekrutacji kreatywnych", interaction.user, f"Kanał: {kanal_forum.mention}")
 
 @bot.tree.command(name="info", description="Wyświetla informacje o aktywności użytkownika.")
 async def info(interaction: discord.Interaction, uzytkownik: discord.Member):
@@ -1237,6 +1245,7 @@ async def ankieta(interaction: discord.Interaction, pytanie: str, opcje: str):
     conn.commit()
     conn.close()
     await interaction.edit_original_response(content="✅ Ankieta została utworzona!")
+    await log_action(interaction.guild, "Stworzono ankietę", interaction.user, f"Pytanie: {pytanie}")
 
 # --- NOWE KOMENDY SKLEPU ---
 @bot.tree.command(name="setup_powiadomienia_sklep", description="Konfiguruje kanał powiadomień o zakupach w sklepie.")
@@ -1246,6 +1255,7 @@ async def setup_powiadomienia_sklep(interaction: discord.Interaction, kanal: dis
         return
     SHOP_CONFIG["channel_id"] = kanal.id
     await interaction.response.send_message(f"✅ Skonfigurowano kanał powiadomień o zakupach na {kanal.mention}.", ephemeral=True)
+    await log_action(interaction.guild, "Skonfigurowano sklep", interaction.user, f"Kanał: {kanal.mention}")
 
 @bot.tree.command(name="dodaj_przedmiot", description="Dodaje przedmiot do sklepu (wymaga ręcznego nadania).")
 @app_commands.describe(kategoria="Kategoria przedmiotu", nazwa="Nazwa przedmiotu", koszt="Cena w reputacji", opis="Opis przedmiotu")
@@ -1262,6 +1272,7 @@ async def dodaj_przedmiot(interaction: discord.Interaction, kategoria: str, nazw
     conn.commit()
     conn.close()
     await interaction.response.send_message(f"✅ Dodano przedmiot `{nazwa}` (ręczna nagroda) do kategorii `{kategoria}` za **{koszt}** reputacji.", ephemeral=True)
+    await log_action(interaction.guild, "Dodano przedmiot do sklepu", interaction.user, f"Nazwa: {nazwa}, Koszt: {koszt}")
 
 @bot.tree.command(name="dodaj_specjalna_role", description="Dodaje limitowaną rolę do sklepu (nadawana automatycznie).")
 @app_commands.describe(nazwa="Nazwa przedmiotu", koszt="Cena w reputacji", rola="Rola do nadania", ilosc="Liczba dostępnych sztuk", opis="Opis przedmiotu")
@@ -1275,6 +1286,7 @@ async def dodaj_specjalna_role(interaction: discord.Interaction, nazwa: str, kos
     conn.commit()
     conn.close()
     await interaction.response.send_message(f"✅ Dodano rolę {rola.mention} jako przedmiot `{nazwa}` (automatyczna nagroda, {ilosc} szt.) za **{koszt}** reputacji.", ephemeral=True)
+    await log_action(interaction.guild, "Dodano rolę do sklepu", interaction.user, f"Nazwa: {nazwa}, Rola: {rola.mention}, Ilość: {ilosc}")
 
 @dodaj_przedmiot.autocomplete('kategoria')
 async def dodaj_przedmiot_autocomplete(interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
@@ -1291,6 +1303,7 @@ async def usun_przedmiot(interaction: discord.Interaction, id_przedmiotu: int):
     conn.commit()
     if cursor.rowcount > 0:
         await interaction.response.send_message(f"✅ Usunięto przedmiot o ID **{id_przedmiotu}** ze sklepu.", ephemeral=True)
+        await log_action(interaction.guild, "Usunięto przedmiot ze sklepu", interaction.user, f"ID: {id_przedmiotu}")
     else:
         await interaction.response.send_message(f"❌ Nie znaleziono przedmiotu o ID **{id_przedmiotu}**.", ephemeral=True)
     conn.close()
@@ -1304,6 +1317,7 @@ async def setup_sklep_panel(interaction: discord.Interaction, kanal: discord.Tex
     view = ShopView(initial_category=SHOP_CATEGORIES[0])
     await kanal.send(embed=embed, view=view)
     await interaction.response.send_message(f"✅ Panel sklepu został utworzony na kanale {kanal.mention}.", ephemeral=True)
+    await log_action(interaction.guild, "Stworzono panel sklepu", interaction.user, f"Kanał: {kanal.mention}")
 
 @bot.tree.command(name="ranking", description="Wyświetla ranking użytkowników z największą reputacją.")
 async def ranking(interaction: discord.Interaction):
@@ -1396,59 +1410,6 @@ async def rekrutacja_zamknij(interaction: discord.Interaction, stanowisko: str):
 async def rekrutacja_autocomplete(interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
     return [app_commands.Choice(name=pos, value=pos) for pos in ALL_RECRUITMENT_TYPES if current.lower() in pos.lower()]
 
-@announcement_group.command(name="zwykle", description="Tworzy standardowe ogłoszenie.")
-async def ogloszenie_zwykle(interaction: discord.Interaction, kanal: discord.TextChannel, rola: Optional[discord.Role] = None):
-    if not is_authorized(interaction, ANNOUNCEMENT_ADMIN_ROLES):
-        await interaction.response.send_message("❌ Nie masz uprawnień do użycia tej komendy.", ephemeral=True)
-        return
-    await interaction.response.send_modal(AnnouncementModal(channel=kanal, role=rola))
-
-@announcement_group.command(name="event", description="Tworzy ogłoszenie o wydarzeniu z systemem zapisów.")
-async def ogloszenie_event(interaction: discord.Interaction, kanal: discord.TextChannel, rola: Optional[discord.Role] = None):
-    if not is_authorized(interaction, ANNOUNCEMENT_ADMIN_ROLES):
-        await interaction.response.send_message("❌ Nie masz uprawnień do użycia tej komendy.", ephemeral=True)
-        return
-    await interaction.response.send_modal(EventModal(channel=kanal, role=rola))
-
-@announcement_group.command(name="lista", description="Wyświetla listę osób zapisanych na wydarzenie.")
-async def ogloszenie_lista(interaction: discord.Interaction, id_wiadomosci: str):
-    if not is_authorized(interaction, ANNOUNCEMENT_ADMIN_ROLES):
-        await interaction.response.send_message("❌ Nie masz uprawnień do użycia tej komendy.", ephemeral=True)
-        return
-    
-    try:
-        message_id = int(id_wiadomosci)
-    except ValueError:
-        await interaction.response.send_message("❌ Podane ID wiadomości jest nieprawidłowe.", ephemeral=True)
-        return
-
-    await interaction.response.defer(ephemeral=True)
-    conn = sqlite3.connect('/data/bot_database.db')
-    cursor = conn.cursor()
-    cursor.execute("SELECT attendees FROM events WHERE message_id = ?", (message_id,))
-    data = cursor.fetchone()
-    conn.close()
-
-    if not data:
-        await interaction.followup.send("❌ Nie znaleziono wydarzenia o podanym ID wiadomości.")
-        return
-
-    attendees_ids = json.loads(data[0])
-    if not attendees_ids:
-        await interaction.followup.send("Nikt jeszcze nie zapisał się na to wydarzenie.")
-        return
-
-    mentions = [f"<@{uid}>" for uid in attendees_ids]
-    message_content = f"**Lista zapisanych osób ({len(mentions)}):**\n" + "\n".join(mentions)
-    
-    # Dzielenie wiadomości, jeśli jest za długa
-    if len(message_content) > 2000:
-        parts = [message_content[i:i+1900] for i in range(0, len(message_content), 1900)]
-        for part in parts:
-            await interaction.followup.send(part)
-    else:
-        await interaction.followup.send(message_content)
-
 @redakcja_group.command(name="pytanie_dnia", description="Publikuje nowe pytanie dnia z automatyczną numeracją.")
 async def pytanie_dnia(interaction: discord.Interaction, kanal: discord.ForumChannel, pytanie: str):
     if not is_authorized(interaction, REDAKCJA_ROLES):
@@ -1499,6 +1460,13 @@ async def qa(interaction: discord.Interaction, kanal: discord.ForumChannel, tytu
     
     await kanal.create_thread(name=tytul, embed=embed)
     await interaction.response.send_message("✅ Pomyślnie rozpoczęto sesję Q&A.", ephemeral=True)
+
+@zlecenia_group.command(name="grafika", description="Tworzy nowe zlecenie na grafikę.")
+async def zlecenie_grafika(interaction: discord.Interaction, kanal: discord.ForumChannel):
+    if not is_authorized(interaction, ZLECENIA_ADMIN_ROLES):
+        await interaction.response.send_message("❌ Nie masz uprawnień do użycia tej komendy.", ephemeral=True)
+        return
+    await interaction.response.send_modal(GraphicCommissionModal(channel=kanal))
 
 
 # --- ZADANIA W TLE ---
@@ -1565,6 +1533,7 @@ async def on_ready():
     bot.tree.add_command(recruitment_group)
     bot.tree.add_command(announcement_group)
     bot.tree.add_command(redakcja_group)
+    bot.tree.add_command(zlecenia_group)
     check_for_old_posts.start()
 
     try:
