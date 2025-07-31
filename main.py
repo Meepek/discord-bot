@@ -516,10 +516,8 @@ class InterviewModal(discord.ui.Modal, title="Nowy Wywiad"):
 class GraphicCommissionModal(discord.ui.Modal, title="Nowe Zlecenie Graficzne"):
     title_input = discord.ui.TextInput(label="Tytuł zlecenia", required=True)
     type_input = discord.ui.TextInput(label="Rodzaj grafiki (logo, baner, etc.)", required=True)
-    dimensions_input = discord.ui.TextInput(label="Wymiary (np. 1920x1080px)", required=False)
-    style_input = discord.ui.TextInput(label="Styl/Kolorystyka", required=False)
-    deadline_input = discord.ui.TextInput(label="Termin realizacji", required=False)
-    info_input = discord.ui.TextInput(label="Dodatkowe informacje", style=discord.TextStyle.paragraph, required=False)
+    details_input = discord.ui.TextInput(label="Szczegóły techniczne (wymiary, styl, termin)", style=discord.TextStyle.paragraph, required=False, placeholder="np. Wymiary: 1920x1080px\nStyl: Nowoczesny, minimalistyczny\nTermin: do 3 dni")
+    info_input = discord.ui.TextInput(label="Dodatkowe informacje/opis", style=discord.TextStyle.paragraph, required=False)
 
     def __init__(self, channel: discord.ForumChannel):
         super().__init__()
@@ -528,13 +526,9 @@ class GraphicCommissionModal(discord.ui.Modal, title="Nowe Zlecenie Graficzne"):
     async def on_submit(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
         embed = discord.Embed(title=f"🎨 Nowe Zlecenie: {self.title_input.value}", color=COLORS["main"], timestamp=datetime.now(POLAND_TZ))
-        embed.add_field(name="Rodzaj grafiki", value=self.type_input.value, inline=True)
-        if self.dimensions_input.value:
-            embed.add_field(name="Wymiary", value=self.dimensions_input.value, inline=True)
-        if self.deadline_input.value:
-            embed.add_field(name="Termin", value=self.deadline_input.value, inline=True)
-        if self.style_input.value:
-            embed.add_field(name="Styl/Kolorystyka", value=self.style_input.value, inline=False)
+        embed.add_field(name="Rodzaj grafiki", value=self.type_input.value, inline=False)
+        if self.details_input.value:
+            embed.add_field(name="Szczegóły techniczne", value=self.details_input.value, inline=False)
         if self.info_input.value:
             embed.add_field(name="Dodatkowe informacje", value=self.info_input.value, inline=False)
         
@@ -548,8 +542,8 @@ class GraphicCommissionModal(discord.ui.Modal, title="Nowe Zlecenie Graficzne"):
         conn = sqlite3.connect('/data/bot_database.db')
         cursor = conn.cursor()
         data = {
-            "Rodzaj": self.type_input.value, "Wymiary": self.dimensions_input.value,
-            "Styl": self.style_input.value, "Termin": self.deadline_input.value,
+            "Rodzaj": self.type_input.value,
+            "Szczegóły": self.details_input.value,
             "Info": self.info_input.value
         }
         cursor.execute("INSERT INTO graphic_commissions (author_id, title, data, thread_id) VALUES (?, ?, ?, ?)",
@@ -1593,6 +1587,7 @@ async def on_ready():
     bot.add_view(ForumSelectionView("creative_recruitment"))
     bot.add_view(ShopView()) # Rejestracja widoku sklepu
     bot.add_view(EventView()) # Rejestracja widoku eventu
+    bot.add_view(CommissionView()) # Rejestracja widoku zlecenia
     
     post_types = ["Propozycja JB", "Propozycja DC", "Błąd JB", "Błąd DC", "Skarga JB", "Skarga DC", "Odwołanie JB", "Odwołanie DC", "Podanie Admin JB", "Podanie Zaufany JB", "Podanie Admin DC"]
     for post_type in post_types:
