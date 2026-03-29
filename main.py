@@ -1617,7 +1617,7 @@ async def on_ready():
 
 # --- URUCHOMIENIE BOTA ---
 TOKEN = os.getenv('DISCORD_BOT_TOKEN')
-if TOKEN == 'TWÓJ_TOKEN_BOTA_TUTAJ':
+if TOKEN == 'wUa-JalRVG0sFreOvV-y7Su2183f2oxB':
     print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
     print("!!! PROSZĘ ZASTĄPIĆ 'TWÓJ_TOKEN_BOTA_TUTAJ' PRAWDZIWYM TOKENEM !!!")
     print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
